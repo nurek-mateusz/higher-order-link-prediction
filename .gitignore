@@ -1,3 +1,8 @@
+data_ai_papers/
+scholp/data/coauth-random-MAG-aipapers
+scholp/data/coauth-top-MAG-aipapers
+scholp/data/fields-MAG-aipapers
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

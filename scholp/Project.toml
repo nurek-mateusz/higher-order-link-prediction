@@ -1,0 +1,32 @@
+name = "scholp"
+uuid = "76d8e7da-cd66-4f1a-b16f-cd8798f87865"
+authors = ["Mateusz Nurek <mateusz.nurek@pwr.edu.pl>"]
+version = "0.1.0"
+
+[deps]
+CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+Combinatorics = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
+FileIO = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
+GLM = "38e38edf-8417-5370-95a0-9cbb8c7f171a"
+IJulia = "7073ff75-c697-5162-941a-fcdaad2a7d2a"
+JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
+PyCall = "438e738f-606a-5dbb-bf0a-cddfbfd45ab0"
+ScHoLP = "c786d6c3-4fbc-59fc-968c-e848efb65d2d"
+ScikitLearn = "3646fa90-6ef7-5e7e-9f22-8aca16db6324"
+StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
+
+[compat]
+CSV = "0.10.15"
+Combinatorics = "0.7.0"
+DataFrames = "1.7.0"
+Distributions = "0.25.118"
+FileIO = "1.17.0"
+GLM = "1.9.0"
+IJulia = "1.26.0"
+JLD2 = "0.5.11"
+PyCall = "1.96.4"
+ScHoLP = "0.1.1"
+ScikitLearn = "0.7.0"
+StatsBase = "0.33.21"
