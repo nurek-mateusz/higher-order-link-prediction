@@ -1,4 +1,5 @@
 import os
+from tqdm import tqdm
 
 # coauth-DBLP: years (e.g., 1974, 1981)
 # coauth-MAG-Geology: years (e.g., 1987, 2007)
@@ -37,7 +38,7 @@ dataset_names = [
     'threads-stack-overflow'
 ]
 
-for dataset in dataset_names:
+for dataset in tqdm(dataset_names):
     # ScHoLP format:
     # Consider a dataset consisting of three simplices:
     #     1. {1, 2, 3} at time 10
@@ -47,6 +48,8 @@ for dataset in dataset_names:
     #     - simplices = [1, 2, 3, 2, 4, 1, 3, 4, 5]
     #     - nverts = [3, 2, 4]
     #     - times = [10, 15, 21]
+
+    print(dataset)
     
     # Read data
     with open(f'data/raw/{dataset}/{dataset}-simplices.txt', 'r') as file:
@@ -81,20 +84,11 @@ for dataset in dataset_names:
     train = [x for x in combined if x[2] <= threshold]
     test = [x for x in combined if x[2] > threshold]
 
-    # Remove from the test set all simplices that appear in the train set.
-    # Using frozenset allows comparing simplices as unordered, hashable sets of vertices.
-    train_simplex_sets = set(frozenset(s) for s, _, _ in train)
-
-    # Use a set to keep only unique simplices from the test set.
-    # We care about which simplices appeared, not how many times they occurred.
-    test_simplex_sets = set(
-        frozenset(s) for s, _, _ in test
-        if frozenset(s) not in train_simplex_sets
-    )
-    test = test_simplex_sets
+    train_simplices = {tuple(sorted(x[0])) for x in train}
+    unique_test = [x for x in test if tuple(sorted(x[0])) not in train_simplices]
 
     # Save train and test sets in ScHoLP format
-    def unpack_train(data):
+    def unpack(data):
         verts = []
         nverts = []
         times = []
@@ -103,17 +97,10 @@ for dataset in dataset_names:
             nverts.append(n)
             times.append(t)
         return verts, nverts, times
-    
-    def unpack_test(data):
-        verts = []
-        nverts = []
-        for v in data:
-            verts.extend(v)
-            nverts.append(len(v))
-        return verts, nverts
 
-    train_verts, train_nverts, train_times = unpack_train(train)
-    test_verts, test_nverts = unpack_test(test)
+    train_verts, train_nverts, train_times = unpack(train)
+    test_verts, test_nverts, test_times = unpack(unique_test)
+    # test_verts, test_nverts = unpack_test(test)
 
     def save(filepath, data):
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
@@ -127,3 +114,4 @@ for dataset in dataset_names:
 
     save(f'data/test/{dataset}/{dataset}-simplices.txt', test_verts)
     save(f'data/test/{dataset}/{dataset}-nverts.txt', test_nverts)
+    save(f'data/test/{dataset}/{dataset}-times.txt', test_times)

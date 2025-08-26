@@ -61,11 +61,13 @@ def calculate_intensity(triangle, simplices, node_to_times, node_time_to_neighbo
             valid_timestamps += 1
     
     # 计算时间跨度
-    if all_timestamps:
-        min_timestamp = min(all_timestamps)
-        max_timestamp = max(all_timestamps)
-        time_span = max_timestamp - min_timestamp + 1
-        return intensity_sum / time_span
+    # if all_timestamps:
+    #     min_timestamp = min(all_timestamps)
+    #     max_timestamp = max(all_timestamps)
+    #     time_span = max_timestamp - min_timestamp + 1
+    #     return intensity_sum / time_span
+    if valid_timestamps > 0:
+        return intensity_sum / valid_timestamps
     else:
         return 0.0
 
@@ -623,12 +625,12 @@ class DataPreparation:
     
     
 
-if __name__ == "__main__":
-    predictor = DataPreparation(n_workers=10)
-    dataset = predictor.load_dataset_from_files('data/train/email-Enron')
-    predictor.build_data_structures(dataset)
-    candidates = predictor.generate_candidate_triangles()
-    features = predictor.calculate_triangle_features(candidates)
+# if __name__ == "__main__":
+#     predictor = DataPreparation(n_workers=10)
+#     dataset = predictor.load_dataset_from_files('data/train/email-Enron')
+#     predictor.build_data_structures(dataset)
+#     candidates = predictor.generate_candidate_triangles()
+#     features = predictor.calculate_triangle_features(candidates)
 
-    with open('data/features/email-Enron.pkl', 'wb') as file:
-        pkl.dump(features, file)
+#     with open('data/features/email-Enron.pkl', 'wb') as file:
+#         pkl.dump(features, file)
