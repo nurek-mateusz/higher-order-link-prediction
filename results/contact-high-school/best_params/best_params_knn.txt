@@ -1,0 +1,1 @@
+{'n_neighbors': 29, 'weights': 'distance', 'algorithm': 'ball_tree', 'p': 1, 'metric': 'euclidean', 'leaf_size': 40, 'n_jobs': -1}

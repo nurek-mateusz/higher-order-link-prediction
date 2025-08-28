@@ -1,0 +1,1 @@
+{'C': np.float64(3.1622776601683795), 'kernel': 'rbf', 'gamma': 'scale', 'class_weight': {0: 1, 1: 10}, 'probability': True, 'max_iter': 5000, 'tol': 0.0001}
