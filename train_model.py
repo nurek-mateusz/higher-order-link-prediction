@@ -43,7 +43,7 @@ if __name__ == "__main__":
         raise Exception('Wrong model name')
     
     split_type = sys.argv[3]
-    if split_type not in ['time', 'event']:
+    if split_type not in ['time', 'events']:
         raise Exception('Wrong split type')
 
 
@@ -59,15 +59,15 @@ if __name__ == "__main__":
     cores = os.cpu_count()
 
     # Training set
-    generator_0_60 = cf.DataPreparation(n_workers=cores, dataset=dataset)
+    generator_0_60 = cf.DataPreparation(n_workers=cores, dataset=dataset, split_type=split_type)
     generator_0_60.build_data_structures('train')
 
     # Validation set
-    generator_0_70 = cf.DataPreparation(n_workers=cores, dataset=dataset)
+    generator_0_70 = cf.DataPreparation(n_workers=cores, dataset=dataset, split_type=split_type)
     generator_0_70.build_data_structures('val')
 
     # Test set
-    generator_0_80 = cf.DataPreparation(n_workers=cores, dataset=dataset)
+    generator_0_80 = cf.DataPreparation(n_workers=cores, dataset=dataset, split_type=split_type)
     generator_0_80.build_data_structures('test')
 
     # Read labels
