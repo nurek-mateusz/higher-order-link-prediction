@@ -161,10 +161,10 @@ def split_high_school_time(nv_lis, sp_lis, tm_lis, start_ratio, end_ratio, test_
     # Split data based on time
     # start_time = int(np.round(np.percentile(tm_lis, start_ratio)))
     # end_time = int(np.round(np.percentile(tm_lis, min(end_ratio, 100))))
-    if end_ratio == 60:
+    if end_ratio == 70:
         end_time = 1386140420
         test_time = 1386226820
-    elif end_ratio == 70:
+    elif end_ratio == 80:
         end_time = 1386226820
         test_time = 1386313220
     else:
@@ -204,10 +204,10 @@ def split_primary_school_time(nv_lis, sp_lis, tm_lis, start_ratio, end_ratio, te
     # Split data based on time
     # start_time = int(np.round(np.percentile(tm_lis, start_ratio)))
     # end_time = int(np.round(np.percentile(tm_lis, min(end_ratio, 100))))
-    if end_ratio == 60:
+    if end_ratio == 70:
         end_time = 117240
         test_time = 117240 + 0.25 * (np.max(tm_lis) - 117240)
-    elif end_ratio == 70:
+    elif end_ratio == 80:
         end_time = 117240 + 0.25 * (np.max(tm_lis) - 117240)
         test_time = 117240 + 0.5 * (np.max(tm_lis) - 117240)
     else:
@@ -252,17 +252,17 @@ if __name__ == "__main__":
 
     for dataset in dataset_list:
         print(dataset)
-        fl_nm_nv = './data/updated/' + dataset + '/' + dataset + '-nverts.txt'
-        fl_nm_sp = './data/updated/' + dataset + '/' + dataset + '-simplices.txt'
-        fl_nm_tm = './data/updated/' + dataset + '/' + dataset + '-times.txt'
+        fl_nm_nv = './data/' + dataset + '/' + dataset + '-nverts.txt'
+        fl_nm_sp = './data/' + dataset + '/' + dataset + '-simplices.txt'
+        fl_nm_tm = './data/' + dataset + '/' + dataset + '-times.txt'
 
         nv_lis = split_file_to_list(fl_nm_nv)  # the number of vertices within each simplex
         sp_lis = split_file_to_list(fl_nm_sp)  # the nodes comprising the simplices
         tm_lis = split_file_to_list(fl_nm_tm)  # the timestamps for each simplex
     
-        G_train, x_train_trg, train_closed, y_train, simplices_train = split_train_probe(nv_lis, sp_lis, tm_lis, 0, 60, 20, 3, dataset, split_type)
-        G_val, x_val_trg, val_closed, y_val, simplices_val = split_train_probe(nv_lis, sp_lis, tm_lis, 0, 70, 10, 3, dataset, split_type)
-        G_test, x_test_trg, test_closed, y_test, simplices_test = split_train_probe(nv_lis, sp_lis, tm_lis, 0, 80, 20, 3, dataset, split_type)
+        G_train, x_train_trg, train_closed, y_train, simplices_train = split_train_probe(nv_lis, sp_lis, tm_lis, 0, 70, 20, 3, dataset, split_type)
+        G_val, x_val_trg, val_closed, y_val, simplices_val = split_train_probe(nv_lis, sp_lis, tm_lis, 0, 80, 10, 3, dataset, split_type)
+        G_test, x_test_trg, test_closed, y_test, simplices_test = split_train_probe(nv_lis, sp_lis, tm_lis, 0, 90, 10, 3, dataset, split_type)
         
         # Print statistics of training and testing data
         print('Training set sample count:', len(x_train_trg))
