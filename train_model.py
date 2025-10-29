@@ -71,15 +71,15 @@ if __name__ == "__main__":
     generator_0_80.build_data_structures('test')
 
     # Read labels
-    with open(f'processing_dataset/{dataset}/y_train.pickle', 'rb') as file:
+    with open(f'processing_dataset/{split_type}/{dataset}/y_train.pickle', 'rb') as file:
         y_train = pickle.load(file)
         y_train = np.array(y_train)
 
-    with open(f'processing_dataset/{dataset}/y_val.pickle', 'rb') as file:
+    with open(f'processing_dataset/{split_type}/{dataset}/y_val.pickle', 'rb') as file:
         y_val = pickle.load(file)
         y_val = np.array(y_val)
 
-    with open(f'processing_dataset/{dataset}/y_test.pickle', 'rb') as file:
+    with open(f'processing_dataset/{split_type}/{dataset}/y_test.pickle', 'rb') as file:
         y_test = pickle.load(file)
         y_test = np.array(y_test)
 
