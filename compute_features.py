@@ -5,9 +5,9 @@ import itertools
 import numpy as np
 import gzip
 from pathlib import Path
-# from tqdm import tqdm
+from tqdm import tqdm
 import math
-import pickle as pkl
+import pickle
 
 
 def process_triangle_worker(batch, simplices, edge_times, node_to_simplices, node_to_times, node_time_to_neighbors, pair_to_times):
@@ -185,8 +185,10 @@ class DataPreparation:
     Only uses three core files: nverts, simplices, times
     """
     
-    def __init__(self, use_multiprocessing=True, n_workers=None):
+    def __init__(self, dataset, split_type, use_multiprocessing=True, n_workers=None):
         """初始化高阶链路预测器"""
+        self.dataset = dataset
+        self.split_type = split_type
         self.use_multiprocessing = use_multiprocessing
         self.n_workers = n_workers or multiprocessing.cpu_count()
         
@@ -205,167 +207,176 @@ class DataPreparation:
         self.training_triangles = []
         self.test_pairs = []
         self.features_computed = False
-        
-        print(f"Initialized DataPreparation with {self.n_workers} workers")
     
-    def load_dataset_from_files(self, dataset_path):
-        """
-        从标准数据文件加载数据集（简化版，只使用nverts、simplices、times）
-        Load dataset from standard data files (simplified, only uses nverts, simplices, times)
+    # def load_dataset_from_files(self, dataset_path):
+    #     """
+    #     从标准数据文件加载数据集（简化版，只使用nverts、simplices、times）
+    #     Load dataset from standard data files (simplified, only uses nverts, simplices, times)
         
-        支持多种文件名格式：
-        - 标准格式: nverts.txt, simplices.txt, times.txt
-        - 压缩格式: nverts.txt.gz, simplices.txt.gz, times.txt.gz
-        - 带前缀格式: coauth-DBLP-nverts.txt.gz, dataset-name-simplices.txt, etc.
+    #     支持多种文件名格式：
+    #     - 标准格式: nverts.txt, simplices.txt, times.txt
+    #     - 压缩格式: nverts.txt.gz, simplices.txt.gz, times.txt.gz
+    #     - 带前缀格式: coauth-DBLP-nverts.txt.gz, dataset-name-simplices.txt, etc.
         
-        Args:
-            dataset_path: 数据集文件夹路径，包含以上格式的文件
+    #     Args:
+    #         dataset_path: 数据集文件夹路径，包含以上格式的文件
         
-        Returns:
-            dict: 包含所有数据的字典
-        """
-        dataset_path = Path(dataset_path)
-        print(f"Loading simplified dataset from: {dataset_path}")
+    #     Returns:
+    #         dict: 包含所有数据的字典
+    #     """
+    #     dataset_path = Path(dataset_path)
+    #     # print(f"Loading simplified dataset from: {dataset_path}")
         
-        # 检查路径是否存在 / Check if the path exists
-        if not dataset_path.exists():
-            raise FileNotFoundError(f"Dataset path does not exist: {dataset_path}")
+    #     # 检查路径是否存在 / Check if the path exists
+    #     if not dataset_path.exists():
+    #         raise FileNotFoundError(f"Dataset path does not exist: {dataset_path}")
         
-        dataset = {}
+    #     dataset = {}
         
-        # 定义需要查找的文件后缀 / Define file suffixes to search for
-        required_suffixes = ['nverts.txt', 'simplices.txt', 'times.txt']
+    #     # 定义需要查找的文件后缀 / Define file suffixes to search for
+    #     required_suffixes = ['nverts.txt', 'simplices.txt', 'times.txt']
         
-        # 加载必需文件 / Load required files
-        for suffix in required_suffixes:
-            found_file = None
+    #     # 加载必需文件 / Load required files
+    #     for suffix in required_suffixes:
+    #         found_file = None
             
-            # 首先查找带前缀的压缩文件 (如 coauth-DBLP-nverts.txt.gz)
-            for file_path in dataset_path.iterdir():
-                if file_path.is_file() and file_path.name.endswith(suffix + '.gz'):
-                    found_file = file_path
-                    break
+    #         # 首先查找带前缀的压缩文件 (如 coauth-DBLP-nverts.txt.gz)
+    #         for file_path in dataset_path.iterdir():
+    #             if file_path.is_file() and file_path.name.endswith(suffix + '.gz'):
+    #                 found_file = file_path
+    #                 break
             
-            # 如果没找到压缩文件，查找普通文件 (如 coauth-DBLP-nverts.txt)
-            if not found_file:
-                for file_path in dataset_path.iterdir():
-                    if file_path.is_file() and file_path.name.endswith(suffix):
-                        found_file = file_path
-                        break
+    #         # 如果没找到压缩文件，查找普通文件 (如 coauth-DBLP-nverts.txt)
+    #         if not found_file:
+    #             for file_path in dataset_path.iterdir():
+    #                 if file_path.is_file() and file_path.name.endswith(suffix):
+    #                     found_file = file_path
+    #                     break
             
-            # 如果还没找到，尝试标准文件名
-            if not found_file:
-                standard_file = dataset_path / suffix
-                standard_gz_file = dataset_path / f"{suffix}.gz"
+    #         # 如果还没找到，尝试标准文件名
+    #         if not found_file:
+    #             standard_file = dataset_path / suffix
+    #             standard_gz_file = dataset_path / f"{suffix}.gz"
                 
-                if standard_gz_file.exists():
-                    found_file = standard_gz_file
-                elif standard_file.exists():
-                    found_file = standard_file
+    #             if standard_gz_file.exists():
+    #                 found_file = standard_gz_file
+    #             elif standard_file.exists():
+    #                 found_file = standard_file
             
-            # 加载找到的文件
-            if found_file:
-                print(f"Loading file: {found_file.name}")
-                try:
-                    if found_file.name.endswith('.gz'):
-                        with gzip.open(found_file, 'rt', encoding='utf-8') as f:
-                            data = self._read_file_content(f, suffix)
-                            dataset[suffix.replace('.txt', '')] = data
-                    else:
-                        with open(found_file, 'r', encoding='utf-8') as f:
-                            data = self._read_file_content(f, suffix)
-                            dataset[suffix.replace('.txt', '')] = data
-                except Exception as e:
-                    print(f"Error reading {found_file}: {e}")
-                    raise FileNotFoundError(f"Failed to load required file with suffix: {suffix}")
-            else:
-                raise FileNotFoundError(f"Required file with suffix '{suffix}' not found in {dataset_path}")
+    #         # 加载找到的文件
+    #         if found_file:
+    #             # print(f"Loading file: {found_file.name}")
+    #             try:
+    #                 if found_file.name.endswith('.gz'):
+    #                     with gzip.open(found_file, 'rt', encoding='utf-8') as f:
+    #                         data = self._read_file_content(f, suffix)
+    #                         dataset[suffix.replace('.txt', '')] = data
+    #                 else:
+    #                     with open(found_file, 'r', encoding='utf-8') as f:
+    #                         data = self._read_file_content(f, suffix)
+    #                         dataset[suffix.replace('.txt', '')] = data
+    #             except Exception as e:
+    #                 print(f"Error reading {found_file}: {e}")
+    #                 raise FileNotFoundError(f"Failed to load required file with suffix: {suffix}")
+    #         else:
+    #             raise FileNotFoundError(f"Required file with suffix '{suffix}' not found in {dataset_path}")
         
-        # 验证数据完整性 / Validate dataset integrity
-        self._validate_dataset(dataset)
+    #     # 验证数据完整性 / Validate dataset integrity
+    #     self._validate_dataset(dataset)
         
-        return dataset
+    #     return dataset
     
-    def _read_file_content(self, file_handle, filename):
-        """
-        读取文件内容并根据文件类型进行解析
-        Read file content and parse according to file type
-        """
-        content = []
+    # def _read_file_content(self, file_handle, filename):
+    #     """
+    #     读取文件内容并根据文件类型进行解析
+    #     Read file content and parse according to file type
+    #     """
+    #     content = []
         
-        if filename in ['nverts.txt', 'times.txt']:
-            # 数值文件：每行一个整数 / Numeric file: one integer per line
-            for line_num, line in enumerate(file_handle):
-                line = line.strip()
-                if line:
-                    try:
-                        value = int(line)
-                        content.append(value)
-                    except ValueError as e:
-                        print(f"Warning: Invalid integer at line {line_num + 1} in {filename}: {line}")
-                        continue
+    #     if filename in ['nverts.txt', 'times.txt']:
+    #         # 数值文件：每行一个整数 / Numeric file: one integer per line
+    #         for line_num, line in enumerate(file_handle):
+    #             line = line.strip()
+    #             if line:
+    #                 try:
+    #                     value = int(line)
+    #                     content.append(value)
+    #                 except ValueError as e:
+    #                     print(f"Warning: Invalid integer at line {line_num + 1} in {filename}: {line}")
+    #                     continue
         
-        elif filename == 'simplices.txt':
-            # Simplices文件：连续的节点索引列表
-            for line_num, line in enumerate(file_handle):
-                line = line.strip()
-                if line:
-                    try:
-                        # 可能是空格分隔或单个数字每行 / space-separated or single number per line
-                        if ' ' in line:
-                            # 空格分隔的多个数字 / Space-separated multiple numbers
-                            values = [int(x) for x in line.split()]
-                            content.extend(values)
-                        else:
-                            # 单个数字 / Single number
-                            value = int(line)
-                            content.append(value)
-                    except ValueError as e:
-                        print(f"Warning: Invalid integer at line {line_num + 1} in {filename}: {line}")
-                        continue
+    #     elif filename == 'simplices.txt':
+    #         # Simplices文件：连续的节点索引列表
+    #         for line_num, line in enumerate(file_handle):
+    #             line = line.strip()
+    #             if line:
+    #                 try:
+    #                     # 可能是空格分隔或单个数字每行 / space-separated or single number per line
+    #                     if ' ' in line:
+    #                         # 空格分隔的多个数字 / Space-separated multiple numbers
+    #                         values = [int(x) for x in line.split()]
+    #                         content.extend(values)
+    #                     else:
+    #                         # 单个数字 / Single number
+    #                         value = int(line)
+    #                         content.append(value)
+    #                 except ValueError as e:
+    #                     print(f"Warning: Invalid integer at line {line_num + 1} in {filename}: {line}")
+    #                     continue
         
-        print(f"Loaded {len(content)} items from {filename}")
-        return content
+    #     # print(f"Loaded {len(content)} items from {filename}")
+    #     return content
     
-    def _validate_dataset(self, dataset):
-        """
-        验证数据集的完整性和一致性
-        Validate dataset integrity and consistency 
-        """
-        required_keys = ['nverts', 'simplices', 'times']
-        missing_keys = [key for key in required_keys if key not in dataset]
+    # def _validate_dataset(self, dataset):
+    #     """
+    #     验证数据集的完整性和一致性
+    #     Validate dataset integrity and consistency 
+    #     """
+    #     required_keys = ['nverts', 'simplices', 'times']
+    #     missing_keys = [key for key in required_keys if key not in dataset]
         
-        if missing_keys:
-            raise ValueError(f"Missing required data: {missing_keys}")
+    #     if missing_keys:
+    #         raise ValueError(f"Missing required data: {missing_keys}")
         
-        # 检查数据长度一致性 / Check data length consistency
-        nverts_len = len(dataset['nverts'])
-        times_len = len(dataset['times'])
+    #     # 检查数据长度一致性 / Check data length consistency
+    #     nverts_len = len(dataset['nverts'])
+    #     times_len = len(dataset['times'])
         
-        if nverts_len != times_len:
-            print(f"Warning: Length mismatch - nverts: {nverts_len}, times: {times_len}")
+    #     if nverts_len != times_len:
+    #         print(f"Warning: Length mismatch - nverts: {nverts_len}, times: {times_len}")
         
-        # 检查simplices数组长度 / Check simplices array length
-        expected_simplices_len = sum(dataset['nverts'])
-        actual_simplices_len = len(dataset['simplices'])
+    #     # 检查simplices数组长度 / Check simplices array length
+    #     expected_simplices_len = sum(dataset['nverts'])
+    #     actual_simplices_len = len(dataset['simplices'])
         
-        if expected_simplices_len != actual_simplices_len:
-            print(f"Warning: Simplices length mismatch - expected: {expected_simplices_len}, actual: {actual_simplices_len}")
+    #     if expected_simplices_len != actual_simplices_len:
+    #         print(f"Warning: Simplices length mismatch - expected: {expected_simplices_len}, actual: {actual_simplices_len}")
         
-        print("Dataset validation completed successfully!")
+    #     # print("Dataset validation completed successfully!")
     
-    def build_data_structures(self, dataset):
+    def build_data_structures(self, suffix):
         """
         从数据集构建内部数据结构
         Build internal data structures from dataset
         """
-        print("Building simplified data structures...")
+        with open(f'processing_dataset/{self.split_type}/{self.dataset}/simplices_{suffix}.pickle', 'rb') as file:
+            data = pickle.load(file)
+
+        nverts = []
+        simplices = []
+        times = []
+        for time, simplex in data:
+            nverts.append(len(simplex))
+            simplices.extend(simplex)
+            times.append(time)
+
+        data = {'nverts': nverts, 'simplices': simplices, 'times': times}
         
         # 构建simplex数据结构 / Build simplex data structure
-        self._build_simplex_data(dataset)
+        self._build_simplex_data(data)
         
         # 生成节点标签 (从simplices中的唯一节点生成) / Generate node labels from unique nodes in simplices
-        self._build_node_labels_from_simplices(dataset)
+        self._build_node_labels_from_simplices(data)
         
         # 构建节点到simplices的映射 / Build node to simplices mapping
         self._build_node_simplex_mapping()
@@ -379,18 +390,18 @@ class DataPreparation:
 
         self._build_pair_to_times()
         
-        print(f"Built data structures:")
-        print(f"- Total simplices: {len(self.simplices)}")
-        print(f"- Total nodes: {len(self.node_labels)}")
-        print(f"- Node-simplex mappings: {sum(len(simplices) for simplices in self.node_to_simplices.values())}")
-        print(f"- Edge timelines: {len(self.edge_times)}")
+        # print(f"Built data structures:")
+        # print(f"- Total simplices: {len(self.simplices)}")
+        # print(f"- Total nodes: {len(self.node_labels)}")
+        # print(f"- Node-simplex mappings: {sum(len(simplices) for simplices in self.node_to_simplices.values())}")
+        # print(f"- Edge timelines: {len(self.edge_times)}")
     
     def _build_node_labels_from_simplices(self, dataset):
         """
         从simplices数据中生成节点标签
         Generate node labels from simplices data (simplified)
         """
-        print("Generating node labels from simplices data...")
+        # print("Generating node labels from simplices data...")
         
         # 从所有simplices中提取唯一的节点ID / Extract unique node IDs from all simplices
         unique_nodes = set()
@@ -401,8 +412,8 @@ class DataPreparation:
         # 这里我们直接使用节点ID作为标签 / Here we directly use node ID as label
         self.node_labels = {node_id: f"Node_{node_id}" for node_id in sorted(unique_nodes)}
         
-        print(f"Generated {len(self.node_labels)} node labels from simplices")
-        print(f"Node ID range: {min(unique_nodes)} to {max(unique_nodes)}")
+        # print(f"Generated {len(self.node_labels)} node labels from simplices")
+        # print(f"Node ID range: {min(unique_nodes)} to {max(unique_nodes)}")
     
     def _build_simplex_data(self, dataset):
         """
@@ -413,7 +424,7 @@ class DataPreparation:
         simplices_flat = dataset['simplices']  
         times = dataset['times']
         
-        print(f"Building simplex data from {len(nverts)} simplices...")
+        # print(f"Building simplex data from {len(nverts)} simplices...")
         
         # 解析simplices数据 / simplices data
         self.simplices = []
@@ -435,7 +446,7 @@ class DataPreparation:
             self.simplices.append(simplex)
             self.simplex_to_time[i] = time
         
-        print(f"Built {len(self.simplices)} simplices")
+        # print(f"Built {len(self.simplices)} simplices")
         
         # 统计simplex阶数分布 / Count simplex order distribution
         order_counts = {}
@@ -443,23 +454,23 @@ class DataPreparation:
             order = simplex['order']
             order_counts[order] = order_counts.get(order, 0) + 1
         
-        print("Simplex order distribution:")
-        for order, count in sorted(order_counts.items()):
-            if order == 0:
-                print(f"  Order {order} (edges): {count}")
-            elif order == 1:
-                print(f"  Order {order} (triangles): {count}")
-            elif order == 2:
-                print(f"  Order {order} (tetrahedra): {count}")
-            else:
-                print(f"  Order {order}: {count}")
+        # print("Simplex order distribution:")
+        # for order, count in sorted(order_counts.items()):
+        #     if order == 0:
+        #         print(f"  Order {order} (edges): {count}")
+        #     elif order == 1:
+        #         print(f"  Order {order} (triangles): {count}")
+        #     elif order == 2:
+        #         print(f"  Order {order} (tetrahedra): {count}")
+        #     else:
+        #         print(f"  Order {order}: {count}")
     
     def _build_node_simplex_mapping(self):
         """
         构建节点到simplices的映射关系
         Build node to simplices mapping 
         """
-        print("Building node-simplex mappings...")
+        # print("Building node-simplex mappings...")
         
         self.node_to_simplices = defaultdict(set)
         
@@ -468,14 +479,14 @@ class DataPreparation:
             for node in simplex['nodes']:
                 self.node_to_simplices[node].add(simplex_id)
         
-        print(f"Built mappings for {len(self.node_to_simplices)} nodes")
+        # print(f"Built mappings for {len(self.node_to_simplices)} nodes")
     
     def _build_edge_and_adjacency_data(self):
         """
         构建边时间线和邻接表
         Build edge timelines and adjacency list
         """
-        print("Building edge timelines and adjacency list...")
+        # print("Building edge timelines and adjacency list...")
         
         self.edge_times = defaultdict(list)
         self.adjacency_list = defaultdict(set)
@@ -496,7 +507,7 @@ class DataPreparation:
                     edge_key = tuple(sorted([nodes[i], nodes[j]]))
                     self.edge_times[edge_key].append(timestamp)
         
-        print(f"Built {len(self.edge_times)} edge timelines")
+        # print(f"Built {len(self.edge_times)} edge timelines")
 
     def _build_node_to_times(self):
         for simplex in self.simplices:
@@ -556,33 +567,15 @@ class DataPreparation:
 
     # ====== 五个特征计算方法 / Five Feature Calculation Methods ======
     
-    def generate_candidate_triangles(self, limit=None):
+    def generate_candidate_triangles(self, suffix):
         """
         生成候选三角形（开放三角形）
         Generate candidate triangles (open triangles)
         """
-        print("Generating candidate triangles...")
-        candidates = set()
-        
-        for node_a in self.adjacency_list:
-            for node_b in self.adjacency_list[node_a]:
-                if node_a < node_b:  # 避免重复
-                    # 找到与a和b都相邻的节点c
-                    common_neighbors = self.adjacency_list[node_a] & self.adjacency_list[node_b]
-                    for node_c in common_neighbors:
-                        if node_b < node_c:  # 保持有序
-                            triangle = tuple(sorted([node_a, node_b, node_c]))
-                            candidates.add(triangle)
-                            
-                            if limit and len(candidates) >= limit:
-                                break
-                    if limit and len(candidates) >= limit:
-                        break
-            if limit and len(candidates) >= limit:
-                break
-        
-        print(f"Generated {len(candidates)} candidate triangles")
-        return list(candidates)
+        with open(f'processing_dataset/{self.split_type}/{self.dataset}/trg_open_{suffix}.pickle', 'rb') as file:
+            trg_open = pickle.load(file)
+
+        return trg_open
     
     def calculate_triangle_features(self, triangles):
         """
@@ -612,8 +605,7 @@ class DataPreparation:
                                        self.node_time_to_neighbors,
                                        self.pair_to_times) for batch in batches]
            
-            # for future in tqdm(as_completed(futures), total=len(batches)):
-            for future in futures:
+            for future in tqdm(as_completed(futures), total=len(batches)):
                 result = future.result()
                 if 'error' in result[0]:
                     print(f"Error processing triangle {result[0]['triangle']}: {result[0]['error']}")

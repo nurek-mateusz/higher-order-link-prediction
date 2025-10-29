@@ -30,132 +30,81 @@ if __name__ == "__main__":
     # PARSE ARGUMENTS
     # ─────────────────────────────────────────────
 
-    if len(sys.argv) != 3:
+    if len(sys.argv) != 4:
         raise Exception('Wrong number of arguments')
 
     dataset = sys.argv[1]
-    if dataset not in ['coauth-DBLP', 'coauth-MAG-Geology', 'coauth-MAG-History', 'congress-bills', 'contact-high-school',
-                    'contact-primary-school', 'DAWN', 'email-Enron', 'email-Eu', 'NDC-classes', 'NDC-substances', 'tags-ask-ubuntu', 
-                    'tags-math-sx', 'tags-stack-overflow', 'threads-ask-ubuntu', 'threads-math-sx', 'threads-stack-overflow']:
+    if dataset not in ['coauth-MAG-Geology', 'coauth-MAG-History', 'contact-high-school', 'contact-primary-school',
+                       'email-Enron', 'email-Eu', 'NDC-classes', 'NDC-substances', 'tags-ask-ubuntu', 'threads-ask-ubuntu']:
         raise Exception('Wrong dataset name')
 
     model_name = sys.argv[2]
     if model_name not in ['rf', 'xgb', 'dt', 'lr', 'svm', 'knn']:
         raise Exception('Wrong model name')
+    
+    split_type = sys.argv[3]
+    if split_type not in ['time', 'event']:
+        raise Exception('Wrong split type')
 
 
-    print(f'PARAMS: {dataset} {model_name}')
+    print(f'PARAMS: {dataset} {model_name} {split_type}')
 
     # ─────────────────────────────────────────────
-    # SPLIT DATA
+    # READ DATA
     # ─────────────────────────────────────────────
 
-    print(f"[START] SPLIT DATA - {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}")
+    print(f"[START] READ DATA - {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}")
 
-    # Read data
-    with open(f'data/raw/{dataset}/{dataset}-simplices.txt', 'r') as file:
-        verts = [int(line.strip()) for line in file]
+    # Read simplices
+    cores = os.cpu_count()
 
-    with open(f'data/raw/{dataset}/{dataset}-nverts.txt', 'r') as file:
-        nverts = [int(line.strip()) for line in file]
+    # Training set
+    generator_0_60 = cf.DataPreparation(n_workers=cores, dataset=dataset)
+    generator_0_60.build_data_structures('train')
 
-    with open(f'data/raw/{dataset}/{dataset}-times.txt', 'r') as file:
-        times = [int(line.strip()) for line in file]
+    # Validation set
+    generator_0_70 = cf.DataPreparation(n_workers=cores, dataset=dataset)
+    generator_0_70.build_data_structures('val')
 
-    # Create simplices
-    simplices = []
-    index = 0
-    for count in nverts:
-        simplex = verts[index:index+count]
-        simplices.append(simplex)
-        index += count
+    # Test set
+    generator_0_80 = cf.DataPreparation(n_workers=cores, dataset=dataset)
+    generator_0_80.build_data_structures('test')
 
-    # Combine simplices with their timestamps and sort them chronologically
-    combined = list(zip(simplices, nverts, times))
-    combined.sort(key=lambda x: x[2])
+    # Read labels
+    with open(f'processing_dataset/{dataset}/y_train.pickle', 'rb') as file:
+        y_train = pickle.load(file)
+        y_train = np.array(y_train)
 
-    # Remove simplices with fewer than two vertices
-    combined = [x for x in combined if x[1] >= 2]
+    with open(f'processing_dataset/{dataset}/y_val.pickle', 'rb') as file:
+        y_val = pickle.load(file)
+        y_val = np.array(y_val)
 
-    # Split the data into training and test sets based on time
-    min_time = combined[0][2]
-    max_time = combined[-1][2]
-    threshold_60 = min_time + round((max_time - min_time) * 0.6)
-    threshold_70 = min_time + round((max_time - min_time) * 0.7)
-    threshold_80 = min_time + round((max_time - min_time) * 0.8)
+    with open(f'processing_dataset/{dataset}/y_test.pickle', 'rb') as file:
+        y_test = pickle.load(file)
+        y_test = np.array(y_test)
 
-    # 0 - 60% of data: features for training set
-    # 60% - 80% of data: labels for training set
-    #
-    # 0 - 70% of data: features for validation set
-    # 70% - 80% of data: labels for validation set
-    #
-    # 0% - 80% of data: features for test set
-    # 80% - 100% of data: labels for test set
-    data_0_60 = [x for x in combined if x[2] <= threshold_60]
-    data_60_80 = [x for x in combined if (x[2] > threshold_60) & (x[2] <= threshold_80)]
+    # Get candidate open triangles
+    candidates_0_60 = generator_0_60.generate_candidate_triangles('train')
+    candidates_0_70 = generator_0_70.generate_candidate_triangles('val')
+    candidates_0_80 = generator_0_80.generate_candidate_triangles('test')
 
-    data_0_70 = [x for x in combined if x[2] <= threshold_70]
-    data_70_80 = [x for x in combined if (x[2] > threshold_70) & (x[2] <= threshold_80)]
-
-    data_0_80 = [x for x in combined if x[2] <= threshold_80]
-    data_80_100 = [x for x in combined if x[2] > threshold_80]
-
-    def unpack(data):
-        verts = []
-        nverts = []
-        times = []
-        for v, n, t in data:
-            verts.extend(v)
-            nverts.append(n)
-            times.append(t)
-        return verts, nverts, times
-
-    simplices_0_60, nverts_0_60, times_0_60 = unpack(data_0_60)
-    simplices_60_80, nverts_60_80, times_60_80 = unpack(data_60_80)
-
-    simplices_0_70, nverts_0_70, times_0_70 = unpack(data_0_70)
-    simplices_70_80, nverts_70_80, times_70_80 = unpack(data_70_80)
-
-    simplices_0_80, nverts_0_80, times_0_80 = unpack(data_0_80)
-    simplices_80_100, nverts_80_100, times_80_100 = unpack(data_80_100)
-
-    dataset_0_60 = {'nverts': nverts_0_60, 'simplices': simplices_0_60, 'times': times_0_60}
-    dataset_60_80 = {'nverts': nverts_60_80, 'simplices': simplices_60_80, 'times': times_60_80}
-    dataset_0_70 = {'nverts': nverts_0_70, 'simplices': simplices_0_70, 'times': times_0_70}
-    dataset_70_80 = {'nverts': nverts_70_80, 'simplices': simplices_70_80, 'times': times_70_80}
-    dataset_0_80 = {'nverts': nverts_0_80, 'simplices': simplices_0_80, 'times': times_0_80}
-
-    # Create candidate open triangles for training set
-    generator_0_60 = cf.DataPreparation(n_workers=5)
-    generator_0_60.build_data_structures(dataset_0_60)
-    candidates_0_60 = generator_0_60.generate_candidate_triangles()
-
-    # Create candidate open triangles for validation set
-    generator_0_70 = cf.DataPreparation(n_workers=5)
-    generator_0_70.build_data_structures(dataset_0_70)
-    candidates_0_70 = generator_0_70.generate_candidate_triangles()
-
-    # Create candidate open triangles for test set
-    generator_0_80 = cf.DataPreparation(n_workers=5)
-    generator_0_80.build_data_structures(dataset_0_80)
-    candidates_0_80 = generator_0_80.generate_candidate_triangles()
-
-    print(f"[END] SPLIT DATA - {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}")
+    print(f"[END] READ DATA - {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}")
 
     # ─────────────────────────────────────────────
     # CREATE FEATURES
     # ─────────────────────────────────────────────
 
     print(f"[START] CREATE FEATURES - {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}")
-
+    
+    # Compute features
     features_0_60 = generator_0_60.calculate_triangle_features(candidates_0_60)
     features_0_70 = generator_0_70.calculate_triangle_features(candidates_0_70)
     features_0_80 = generator_0_80.calculate_triangle_features(candidates_0_80)
 
+    # Convert features to numpy format
     feature_names = ['intensity', 'lifetime', 'internal_density', 'structural_imbalance', 'reinforcement']
 
-    # Train set features
+    # Training set features
     x_train = []
     for i, item in enumerate(features_0_60):
         features = [item[feature] for feature in feature_names]
@@ -176,33 +125,18 @@ if __name__ == "__main__":
         x_test.append(features)
     x_test = np.array(x_test)
 
-    # Train set labels
-    simplices_60_80 = {tuple(sorted(x)) for x,_,_ in data_60_80}
-    y_train = [1 if x in simplices_60_80 else 0 for x in candidates_0_60]
-    y_train = np.array(y_train)
-
-    # Validation set labels
-    simplices_70_80 = {tuple(sorted(x)) for x,_,_ in data_70_80}
-    y_val = [1 if x in simplices_70_80 else 0 for x in candidates_0_70]
-    y_val = np.array(y_val)
-
-    # Test set labels
-    simplices_80_100 = {tuple(sorted(x)) for x,_,_ in data_80_100}
-    labels_0_80 = [1 if x in simplices_80_100 else 0 for x in candidates_0_80]
-    y_test = np.array(labels_0_80)
-
-    def under_sample(x_train, y_train, ratio=1):
-        rus = RandomUnderSampler(sampling_strategy=ratio, random_state=RANDOM_STATE)
-        x_resampled, y_resampled = rus.fit_resample(x_train, y_train)
-        return x_resampled, y_resampled
-
     print(f'{len(x_train)}, {len(y_train)}')
     print(f'{len(x_val)}, {len(y_val)}')
     print(f'{len(x_test)}, {len(y_test)}')
 
+    # Negative edge undersampling
+    def under_sample(x_train, y_train, ratio=1):
+        rus = RandomUnderSampler(sampling_strategy=ratio, random_state=RANDOM_STATE)
+        x_resampled, y_resampled = rus.fit_resample(x_train, y_train)
+        return x_resampled, y_resampled
+    
     print(f'Before undersampling train set: zeros: {np.count_nonzero(y_train == 0)}, ones: {np.count_nonzero(y_train == 1)}')
 
-    # Negative edge undersampling
     x_train, y_train = under_sample(x_train, y_train, ratio=0.33)
 
     print(f'After undersampling train set: zeros: {np.count_nonzero(y_train == 0)}, ones: {np.count_nonzero(y_train == 1)}')
@@ -345,7 +279,6 @@ if __name__ == "__main__":
     auc_score = roc_auc_score(y_test, y_test_pred)
     performance = avg_prec / (sum(y_test) / len(y_test)) # avg_prec / random_baseline
 
-    auc_score = roc_auc_score(y_test, y_test_pred)
     print('Test set:', 'Performance', round(performance, 4), 'AP', round(avg_prec, 4), 'AUC', round(auc_score, 4))
 
     print(f"[END] TRAIN MODEL - {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}")
@@ -361,7 +294,7 @@ if __name__ == "__main__":
         if not os.path.exists(path):
             os.makedirs(path)
 
-    results_base = f"results/{dataset}"
+    results_base = f"results/{split_type}/{dataset}"
     model_dir = f"{results_base}/best_model"
     params_dir = f"{results_base}/best_params"
     metrics_dir = f"{results_base}/metrics"
