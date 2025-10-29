@@ -1,1 +1,0 @@
-{'criterion': 'gini', 'max_depth': 10, 'min_samples_split': 10, 'min_samples_leaf': 10, 'max_features': 'log2', 'min_impurity_decrease': 0.0, 'ccp_alpha': 0.0, 'class_weight': {0: 1, 1: 10}, 'random_state': 0}

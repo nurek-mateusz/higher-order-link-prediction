@@ -1,1 +1,0 @@
-{'n_neighbors': 29, 'weights': 'uniform', 'algorithm': 'ball_tree', 'p': 2, 'metric': 'manhattan', 'leaf_size': 20, 'n_jobs': -1}

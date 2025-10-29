@@ -1,1 +1,0 @@
-{'n_neighbors': 19, 'weights': 'distance', 'algorithm': 'auto', 'p': 1, 'metric': 'manhattan', 'leaf_size': 40, 'n_jobs': -1}
