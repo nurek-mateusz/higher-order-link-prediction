@@ -5,7 +5,6 @@ import itertools
 import numpy as np
 import gzip
 from pathlib import Path
-from tqdm import tqdm
 import math
 import pickle
 
@@ -605,7 +604,7 @@ class DataPreparation:
                                        self.node_time_to_neighbors,
                                        self.pair_to_times) for batch in batches]
            
-            for future in tqdm(as_completed(futures), total=len(batches)):
+            for future in futures:
                 result = future.result()
                 if 'error' in result[0]:
                     print(f"Error processing triangle {result[0]['triangle']}: {result[0]['error']}")
