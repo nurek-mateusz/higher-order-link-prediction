@@ -4,6 +4,8 @@ motifs/scholp/data/coauth-random-MAG-aipapers
 motifs/scholp/data/coauth-top-MAG-aipapers
 motifs/scholp/data/fields-MAG-aipapers
 
+*.pkl
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
