@@ -1,0 +1,1 @@
+{'penalty': 'l1', 'C': 160.68611676583023, 'solver': 'liblinear', 'max_iter': 900, 'fit_intercept': True, 'class_weight': None}

@@ -1,0 +1,1 @@
+{'n_estimators': 250, 'min_samples_split': 7, 'min_samples_leaf': 1, 'max_features': 0.7, 'oob_score': False, 'max_samples': 0.9373779640500455, 'min_impurity_decrease': 0.0005003655607766206, 'criterion': 'entropy', 'ccp_alpha': 0.0010524708362365074, 'class_weight': 'balanced'}

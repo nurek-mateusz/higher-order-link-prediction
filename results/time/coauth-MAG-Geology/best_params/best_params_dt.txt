@@ -1,0 +1,1 @@
+{'criterion': 'entropy', 'max_depth': 40, 'min_samples_split': 10, 'min_samples_leaf': 2, 'max_features': 'sqrt', 'min_impurity_decrease': 0.001, 'ccp_alpha': 0.001, 'class_weight': {0: 1, 1: 6}, 'random_state': 0}

@@ -15,16 +15,42 @@ import xgboost as xgb
 from sklearn.metrics import average_precision_score
 from sklearn.metrics import roc_auc_score
 from sklearn.preprocessing import MinMaxScaler
+import optuna
+from optuna.samplers import TPESampler
 
+
+def compute_composite_indices(x, alpha, beta, gamma, w1, w2, w3, w4, w5):
+    INTENSITY = 0
+    LIFETIME = 1
+    INTERNAL_DENSITY = 2
+    STRUCTURAL_IMBALANCE = 3
+    REINFORCEMENT = 4
+
+    twdi = (alpha * x[:,INTERNAL_DENSITY] + beta * x[:,REINFORCEMENT]) * np.exp(-gamma * np.abs(x[:,LIFETIME]))
+
+    reinforcement_boost = np.tanh(beta * x[:,REINFORCEMENT])
+    lifetime_factor = 1 / (1 + gamma * np.abs(x[:,LIFETIME]))
+    hai = x[:,INTERNAL_DENSITY] * (1 + reinforcement_boost) * lifetime_factor
+
+    ddi = (x[:,INTERNAL_DENSITY] * x[:,REINFORCEMENT]) / np.sqrt(np.abs(x[:,LIFETIME]) + 1)
+
+    wci = (w1 * x[:,INTENSITY] + 
+            w2 * x[:,LIFETIME] + 
+            w3 * x[:,INTERNAL_DENSITY] + 
+            w4 * x[:,STRUCTURAL_IMBALANCE] +
+            w5 * x[:,REINFORCEMENT])
+    
+    return twdi, hai, ddi, wci
 
 if __name__ == "__main__":
     RANDOM_STATE = 0
     random.seed(RANDOM_STATE)
     np.random.seed(RANDOM_STATE)
+    tpe_sampler = TPESampler(seed=RANDOM_STATE)
 
     # dataset = 'email-Enron'
     # model_name = 'lr'
-    n_iter = 500 # Number of random combinations to try for hyperparameters
+    n_iter = 1000 # Number of random combinations to try for hyperparameters
 
 
     # ─────────────────────────────────────────────
@@ -41,12 +67,9 @@ if __name__ == "__main__":
 
     # rf - Random Forest
     # xgb - XGBoost
-    # dt - Decision Tree
     # lr - Logistic Regression
-    # svm - Support Vector Machine
-    # knn - K-Nearest Neighbors
     model_name = sys.argv[2]
-    if model_name not in ['rf', 'xgb', 'dt', 'lr', 'svm', 'knn']:
+    if model_name not in ['rf', 'xgb', 'lr']:
         raise Exception('Wrong model name')
     
     # Split data based on time or number of events
@@ -110,8 +133,16 @@ if __name__ == "__main__":
     features_test = generator_test.calculate_triangle_features(candidates_test)
 
     # Convert features to numpy format
-
     feature_names = ['intensity', 'lifetime', 'internal_density', 'structural_imbalance', 'reinforcement']
+
+    # features = {
+    #     'triangle': triangle,
+    #     'intensity': calculate_intensity(triangle, simplices, node_to_times, node_time_to_neighbors),
+    #     'lifetime': calculate_lifetime(triangle, edge_times),
+    #     'internal_density': calculate_internal_density(triangle, pair_to_times),
+    #     'structural_imbalance': calculate_structural_imbalance(triangle, pair_to_times),
+    #     'reinforcement': calculate_reinforcement(triangle, node_to_simplices)
+    # }
 
     # Training set features
     x_train = []
@@ -168,121 +199,103 @@ if __name__ == "__main__":
 
     print(f"[START] TRAIN MODEL - {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}")
 
-    # Hyperparameters
-    if model_name == 'rf':
-        model_constructor = RandomForestClassifier
-        param_dist = {
-            'n_estimators': [200, 400, 600],
-            'max_depth': [None, 10, 20, 40],
-            'min_samples_split': [2, 5, 10],
-            'min_samples_leaf': [1, 2, 5, 10],
-            'max_features': ['sqrt', 'log2', 0.5, 0.7, 1.0],
-            'bootstrap': [True],
-            'oob_score': [True, False],
-            'max_samples': [None, 0.7, 0.9, 1.0],
-            'min_impurity_decrease': [0.0, 0.001, 0.01],
-            'criterion': ['gini', 'entropy', 'log_loss'],
-            'ccp_alpha': [0.0, 0.001, 0.01],
-            'class_weight': [None, 'balanced', 'balanced_subsample'],
-            'n_jobs': [-1],
-            'random_state': [RANDOM_STATE],
-        }
-    elif model_name == 'xgb':
-        model_constructor = xgb.XGBClassifier
-        param_dist = {
-            'n_estimators': [200, 400, 800, 1200],
-            'learning_rate': [0.01, 0.05, 0.1, 0.2, 0.3],
-            'max_depth': [3, 5, 7, 10],
-            'min_child_weight': [1, 3, 5, 10],
-            'gamma': [0, 0.05, 0.1, 0.2, 1, 2, 3],
-            'subsample': [0.6, 0.7, 0.8, 0.9, 1.0],
-            'colsample_bytree': [0.6, 0.8, 1.0],
-            'colsample_bylevel': [0.6, 0.8, 1.0],
-            'colsample_bynode': [0.6, 0.8, 1.0],
-            'reg_alpha': [0, 0.001, 0.01, 0.1, 1, 10],
-            'reg_lambda': [0.01, 0.1, 1, 5, 10, 50],
-            'scale_pos_weight': [1, 3, 6, 10, 20],  # tune around neg/pos ratio
-            'n_jobs': [-1],
-            'random_state': [RANDOM_STATE],
-        }
-    elif model_name == 'dt':
-        model_constructor = DecisionTreeClassifier
-        param_dist = {
-            'criterion': ['gini', 'entropy'],
-            'max_depth': [None, 5, 10, 20, 40],
-            'min_samples_split': [2, 5, 10, 20],
-            'min_samples_leaf': [1, 2, 5, 10],
-            'max_features': [None, 'sqrt', 'log2'],
-            'min_impurity_decrease': [0.0, 0.001, 0.01],
-            'ccp_alpha': [0.0, 0.001, 0.01],
-            'class_weight': [None, 'balanced', {0:1, 1:3}, {0:1, 1:6}, {0:1, 1:10}],
-            'random_state': [RANDOM_STATE],
-        }
-    elif model_name == 'lr':
-        model_constructor = LogisticRegression
-        param_dist = {
-            'penalty': ['l2', 'l1'],
-            'C': np.logspace(-4, 4, 20),
-            'solver': ['liblinear', 'saga'],  # l1: liblinear/saga; l2: both
-            'max_iter': [200, 500, 1000],
-            'fit_intercept': [True, False],
-            'class_weight': [None, 'balanced', {0:1, 1:2}, {0:1, 1:3}, {0:1, 1:5}, {0:1, 1:10}],
-            'random_state': [RANDOM_STATE],
-        }  
-    elif model_name == 'svm':
-        model_constructor = SVC
-        param_dist = {
-            'C': np.logspace(-2, 2, 9),
-            'kernel': ['linear', 'rbf'],
-            'gamma': ['scale', 'auto'] + list(np.logspace(-3, 1, 7)),
-            'class_weight': [None, 'balanced', {0:1, 1:3}, {0:1, 1:6}, {0:1, 1:10}],
-            'probability': [True],
-            'max_iter': [2000, 5000],
-            'tol': [1e-4, 1e-3],
-            # do not include n_jobs or random_state; SVC doesn't support them
-        }
-    elif model_name == 'knn':
-        model_constructor = KNeighborsClassifier
-        param_dist = {
-            'n_neighbors': list(range(3, 31, 2)),
-            'weights': ['uniform', 'distance'],
-            'algorithm': ['auto', 'kd_tree', 'ball_tree'],
-            'p': [1, 2],
-            'metric': ['euclidean', 'manhattan'],
-            'leaf_size': [20, 30, 40, 50],
-            'n_jobs': [-1],
-        }
-
-    best_score = 0
-    best_params = None
-
-    # Perform random search
-    for i in range(n_iter):
-        # Randomly sample parameters
-        params = {key: random.choice(values) for key, values in param_dist.items()}
+    def objective(trial):
+        if model_name == "rf":
+            model = RandomForestClassifier(
+                n_estimators=trial.suggest_int("n_estimators", 200, 600, step=50),
+                max_depth=trial.suggest_int("max_depth", 10, 40) if trial.suggest_categorical("use_depth_limit", [True, False]) else None,
+                min_samples_split=trial.suggest_int("min_samples_split", 2, 10),
+                min_samples_leaf=trial.suggest_int("min_samples_leaf", 1, 10),
+                max_features=trial.suggest_categorical("max_features", ['sqrt', 'log2', 0.5, 0.7, 1.0]),
+                bootstrap=True,  # always True
+                oob_score=trial.suggest_categorical("oob_score", [True, False]),
+                max_samples=trial.suggest_float("max_samples", 0.7, 1.0) if trial.suggest_categorical("use_sample_limit", [True, False]) else None,
+                min_impurity_decrease=trial.suggest_float("min_impurity_decrease", 0.0, 0.01),
+                criterion=trial.suggest_categorical("criterion", ['gini', 'entropy', 'log_loss']),
+                ccp_alpha=trial.suggest_float("ccp_alpha", 0.0, 0.01),
+                class_weight=trial.suggest_categorical("class_weight", [None, 'balanced', 'balanced_subsample']),
+                n_jobs=-1,
+                random_state=RANDOM_STATE
+            )
+        elif model_name == "xgb":
+            model = xgb.XGBClassifier(
+                n_estimators=trial.suggest_int("n_estimators", 200, 1200, step=50),
+                learning_rate=trial.suggest_float("learning_rate", 0.01, 0.3),
+                max_depth=trial.suggest_int("max_depth", 3, 10),
+                min_child_weight=trial.suggest_int("min_child_weight", 1, 10),
+                gamma=trial.suggest_float("gamma", 0, 3),
+                subsample=trial.suggest_float("subsample", 0.6, 1.0),
+                colsample_bytree=trial.suggest_float("colsample_bytree", 0.6, 1.0),
+                colsample_bylevel=trial.suggest_float("colsample_bylevel", 0.6, 1.0),
+                colsample_bynode=trial.suggest_float("colsample_bynode", 0.6, 1.0),
+                reg_alpha=trial.suggest_float("reg_alpha", 0.0, 10.0),
+                reg_lambda=trial.suggest_float("reg_lambda", 0.01, 50),
+                scale_pos_weight=trial.suggest_int("scale_pos_weight", 1, 20),
+                n_jobs=-1,
+                random_state=RANDOM_STATE,
+                eval_metric="logloss"
+            )
+        elif model_name == "lr":
+            model = LogisticRegression(
+                penalty=trial.suggest_categorical("penalty", ['l2', 'l1']),
+                C=trial.suggest_float("C", 1e-4, 1e4,log=True),
+                solver=trial.suggest_categorical("solver", ['liblinear', 'saga']),
+                max_iter=trial.suggest_int("max_iter", 200, 1000, step=100),
+                fit_intercept=trial.suggest_categorical("fit_intercept", [True, False]),
+                class_weight=trial.suggest_categorical("class_weight", [None, 'balanced', {0:1,1:2},{0:1,1:3},{0:1,1:5},{0:1,1:10}]),
+                random_state=RANDOM_STATE
+            )
+        else:
+            raise NotImplementedError(f"Model {model_name} not implemented in Optuna objective.")
         
-        # Create and train model
-        model = model_constructor()
-        model.set_params(**params)
-        model.fit(x_train_scaled, y_train)
-        
+        # Aditional learnable weights
+        alpha = trial.suggest_float("w_alpha", 0, 3)
+        beta = trial.suggest_float("w_beta", 0, 3)
+        gamma = trial.suggest_float("w_gamma", 1e-4, 3, log=True)
+        w1 = trial.suggest_float("w1", 0, 3)
+        w2 = trial.suggest_float("w2", 0, 3)
+        w3 = trial.suggest_float("w3", 0, 3)
+        w4 = trial.suggest_float("w4", 0, 3)
+        w5 = trial.suggest_float("w5", 0, 3)
+
+        # Compute composite indices
+        twdi_train, hai_train, ddi_train, wci_train = compute_composite_indices(x_train_scaled, alpha, beta, gamma, w1, w2, w3, w4, w5)
+        twdi_val, hai_val, ddi_val, wci_val = compute_composite_indices(x_val_scaled, alpha, beta, gamma, w1, w2, w3, w4, w5)
+
+        # Add to existing features
+        x_train_comb = np.column_stack([x_train_scaled, twdi_train, ddi_train, wci_train])
+        x_val_comb = np.column_stack([x_val_scaled, twdi_val, ddi_val, wci_val])
+
+        # Train model
+        model.fit(x_train_comb, y_train)
+
         # Evaluate on validation set
-        y_val_pred = model.predict_proba(x_val_scaled)[:, 1]
+        y_val_pred = model.predict_proba(x_val_comb)[:, 1]
         avg_prec = average_precision_score(y_val, y_val_pred)
         auc_score = roc_auc_score(y_val, y_val_pred)
         performance = avg_prec / (sum(y_val) / len(y_val)) # avg_prec / random_baseline
-        
-        # Set which metric to use to choose the best model
-        score = performance
-        
-        # Track best model
-        if score > best_score:
-            best_score = score
-            best_params = params
-            
-        print(f"Iteration {i+1}/{n_iter}: Score = {score:.4f}, Best = {best_score:.4f}")
 
-    print("\nBest parameters:", best_params)
+        best_score = 0
+        try:
+            best_score = trial.study.best_value
+        except ValueError:
+            pass
+
+        print(f"Iteration {trial.number+1}/{n_iter}: Score = {performance:.4f}, Best = {best_score:.4f}")
+
+        return performance
+
+    study = optuna.create_study(direction='maximize', sampler=tpe_sampler)
+    study.optimize(objective, n_trials=n_iter)
+
+    best_score = study.best_value
+    best_params = study.best_params
+    weight_names = ["w_alpha", "w_beta", "w_gamma", "w1", "w2", "w3", "w4", "w5"]
+    composite_weights = {key: best_params.pop(key) for key in weight_names if key in best_params}
+
+    _ =  {key: best_params.pop(key) for key in ["use_depth_limit", "use_sample_limit"] if key in best_params}
+
+    print("Best parameters:", best_params)
     print("Best validation score:", best_score)
 
     # Final undersampling and data normalization
@@ -297,8 +310,30 @@ if __name__ == "__main__":
     x_val = scaler.fit_transform(x_val)
     x_test = scaler.transform(x_test)
 
+    alpha = composite_weights["w_alpha"]
+    beta = composite_weights["w_beta"]
+    gamma = composite_weights["w_gamma"]
+    w1 = composite_weights["w1"]
+    w2 = composite_weights["w2"]
+    w3 = composite_weights["w3"]
+    w4 = composite_weights["w4"]
+    w5 = composite_weights["w5"]
+
+    twdi_val, hai_val, ddi_val, wci_val = compute_composite_indices(x_val, alpha, beta, gamma, w1, w2, w3, w4, w5)
+    twdi_test, hai_test, ddi_test, wci_test = compute_composite_indices(x_test, alpha, beta, gamma, w1, w2, w3, w4, w5)
+
+    x_val = np.column_stack([x_val, twdi_val, hai_val, ddi_val, wci_val])
+    x_test = np.column_stack([x_test, twdi_test, hai_test, ddi_test, wci_test])
+
     # Fit final model
-    model = model_constructor()
+    if model_name == "rf":
+        model = RandomForestClassifier()
+    elif model_name == "xgb":
+        model = xgb.XGBClassifier()
+    elif model_name == "lr":
+        model = LogisticRegression()
+    else:
+        raise Exception('Wrong model name')
     model.set_params(**best_params)
     model.fit(x_val, y_val)
 
@@ -323,7 +358,7 @@ if __name__ == "__main__":
         if not os.path.exists(path):
             os.makedirs(path)
 
-    results_base = f"results/{split_type}/{dataset}"
+    results_base = f"results_bayesian/{split_type}/{dataset}"
     model_dir = f"{results_base}/best_model"
     params_dir = f"{results_base}/best_params"
     metrics_dir = f"{results_base}/metrics"
@@ -337,6 +372,14 @@ if __name__ == "__main__":
         f.write(f"{performance},{avg_prec},{auc_score}\n")
 
     # Save best params
+    best_params["w_alpha"] = alpha
+    best_params["w_beta"] = beta
+    best_params["w_gamma"] = gamma
+    best_params["w1"] = w1
+    best_params["w2"] = w2
+    best_params["w3"] = w3
+    best_params["w4"] = w4
+    best_params["w5"] = w5
     with open(f"{params_dir}/best_params_{model_name}.txt", "w") as f:
         f.write(str(best_params))
 

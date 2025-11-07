@@ -159,15 +159,13 @@ def split_high_school_time(nv_lis, sp_lis, tm_lis, start_ratio, end_ratio, test_
     old_simplices, new_simplices = [], []
     
     # Split data based on time
-    # start_time = int(np.round(np.percentile(tm_lis, start_ratio)))
-    # end_time = int(np.round(np.percentile(tm_lis, min(end_ratio, 100))))
-    if end_ratio == 70:
+    if end_ratio == 70: # training set
         end_time = 1386140420
         test_time = 1386226820
-    elif end_ratio == 80:
+    elif end_ratio == 80: # validation set
         end_time = 1386226820
         test_time = 1386313220
-    else:
+    else: # test set
         end_time = 1386313220
         test_time = np.max(tm_lis)
 
@@ -202,15 +200,13 @@ def split_primary_school_time(nv_lis, sp_lis, tm_lis, start_ratio, end_ratio, te
     old_simplices, new_simplices = [], []
     
     # Split data based on time
-    # start_time = int(np.round(np.percentile(tm_lis, start_ratio)))
-    # end_time = int(np.round(np.percentile(tm_lis, min(end_ratio, 100))))
-    if end_ratio == 70:
+    if end_ratio == 70: # training set
         end_time = 117240
-        test_time = 117240 + 0.25 * (np.max(tm_lis) - 117240)
-    elif end_ratio == 80:
+        test_time = 117240 + 0.5 * (np.max(tm_lis) - 117240)
+    elif end_ratio == 80: # validation set
         end_time = 117240 + 0.25 * (np.max(tm_lis) - 117240)
         test_time = 117240 + 0.5 * (np.max(tm_lis) - 117240)
-    else:
+    else: # test set
         end_time = 117240 + 0.5 * (np.max(tm_lis) - 117240)
         test_time = np.max(tm_lis)
 
@@ -246,9 +242,9 @@ if __name__ == "__main__":
     if split_type not in ['time', 'events']:
         raise Exception('Wrong split type')
     
-    dataset_list = ['coauth-MAG-Geology', 'coauth-MAG-History', 'contact-high-school', 'contact-primary-school', 'email-Enron', 'email-Eu', 
+    dataset_list = ['coauth-MAG-Geology', 'coauth-MAG-History', 'contact-high-school', 'contact-primary-school', 'contact-primary-school-2', 'email-Enron', 'email-Eu', 
                     'NDC-classes', 'NDC-substances', 'threads-ask-ubuntu', 'tags-ask-ubuntu']
-    # dataset_list = ['test']
+    # dataset_list = ['contact-primary-school']
 
     for dataset in dataset_list:
         print(dataset)

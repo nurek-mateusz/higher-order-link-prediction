@@ -1,0 +1,1 @@
+{'n_estimators': 550, 'min_samples_split': 7, 'min_samples_leaf': 5, 'max_features': 'log2', 'oob_score': False, 'max_samples': 0.9620169219705197, 'min_impurity_decrease': 0.008971196509431316, 'criterion': 'gini', 'ccp_alpha': 0.007268014774596684, 'class_weight': 'balanced'}

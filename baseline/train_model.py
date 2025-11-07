@@ -1,20 +1,39 @@
-import compute_features as cf
-import os
-import sys
-import numpy as np
-import random
-import pickle
-from datetime import datetime
-from imblearn.under_sampling import RandomUnderSampler
-from sklearn.ensemble import RandomForestClassifier
+import pandas as pd
+from find_motifs import *
 from sklearn.linear_model import LogisticRegression
+import pickle
+from sklearn.metrics import average_precision_score
+from imblearn.under_sampling import RandomUnderSampler
+import random
+import numpy as np
+import sys
+import os
+from datetime import datetime
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
 import xgboost as xgb
-from sklearn.metrics import average_precision_score
 from sklearn.metrics import roc_auc_score
 from sklearn.preprocessing import MinMaxScaler
+
+
+# Function to undersample the dataset to balance positive and negative samples
+def under_sample(x_train, y_train, ratio=1):
+    rus = RandomUnderSampler(sampling_strategy=ratio, random_state=0)
+    x_resampled, y_resampled = rus.fit_resample(x_train, y_train)
+    return x_resampled, y_resampled
+
+# Function to read the training and testing data from pickle files
+def read_data(dataset, split_type, s):
+    with open('../processing_dataset/' + split_type + '/' + dataset + '/' + s + '_mean.pickle', 'rb') as f:
+        x = pickle.load(f)
+    # x = x.apply(lambda a: (a - a.min()) / (a.max() - a.min()))  # Normalize data
+
+    with open('../processing_dataset/' + split_type + '/' + dataset + '/y_' + s + '.pickle', 'rb') as f:
+        y = pickle.load(f)
+
+    return x, y
 
 
 if __name__ == "__main__":
@@ -63,87 +82,15 @@ if __name__ == "__main__":
 
     print(f"[START] READ DATA - {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}")
 
-    # Read simplices
-    cores = os.cpu_count()
-
-    # Training set
-    generator_train = cf.DataPreparation(n_workers=cores, dataset=dataset, split_type=split_type)
-    generator_train.build_data_structures('train')
-
-    # Validation set
-    generator_val = cf.DataPreparation(n_workers=cores, dataset=dataset, split_type=split_type)
-    generator_val.build_data_structures('val')
-
-    # Test set
-    generator_test = cf.DataPreparation(n_workers=cores, dataset=dataset, split_type=split_type)
-    generator_test.build_data_structures('test')
-
-    # Read labels
-    with open(f'processing_dataset/{split_type}/{dataset}/y_train.pickle', 'rb') as file:
-        y_train = pickle.load(file)
-        y_train = np.array(y_train)
-
-    with open(f'processing_dataset/{split_type}/{dataset}/y_val.pickle', 'rb') as file:
-        y_val = pickle.load(file)
-        y_val = np.array(y_val)
-
-    with open(f'processing_dataset/{split_type}/{dataset}/y_test.pickle', 'rb') as file:
-        y_test = pickle.load(file)
-        y_test = np.array(y_test)
-
-    # Get candidate open triangles
-    candidates_train = generator_train.generate_candidate_triangles('train')
-    candidates_val = generator_val.generate_candidate_triangles('val')
-    candidates_test = generator_test.generate_candidate_triangles('test')
-
-    print(f"[END] READ DATA - {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}")
-
-    # ─────────────────────────────────────────────
-    # CREATE FEATURES
-    # ─────────────────────────────────────────────
-
-    print(f"[START] CREATE FEATURES - {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}")
-    
-    # Compute features
-    features_train = generator_train.calculate_triangle_features(candidates_train)
-    features_val = generator_val.calculate_triangle_features(candidates_val)
-    features_test = generator_test.calculate_triangle_features(candidates_test)
-
-    # Convert features to numpy format
-
-    feature_names = ['intensity', 'lifetime', 'internal_density', 'structural_imbalance', 'reinforcement']
-
-    # Training set features
-    x_train = []
-    for i, item in enumerate(features_train):
-        features = [item[feature] for feature in feature_names]
-        x_train.append(features)
-    x_train = np.array(x_train)
-
-    # Validation set features
-    x_val = []
-    for i, item in enumerate(features_val):
-        features = [item[feature] for feature in feature_names]
-        x_val.append(features)
-    x_val = np.array(x_val)
-
-    # Test set features
-    x_test = []
-    for item in features_test:
-        features = [item[feature] for feature in feature_names]
-        x_test.append(features)
-    x_test = np.array(x_test)
+    # Read training and testing data
+    x_train, y_train = read_data(dataset, split_type, 'train')
+    x_val, y_val = read_data(dataset, split_type, 'val')
+    x_test, y_test = read_data(dataset, split_type, 'test')
 
     print(f'{len(x_train)}, {len(y_train)}')
     print(f'{len(x_val)}, {len(y_val)}')
     print(f'{len(x_test)}, {len(y_test)}')
 
-    # Negative edge undersampling
-    def under_sample(x_train, y_train, ratio=1):
-        rus = RandomUnderSampler(sampling_strategy=ratio, random_state=RANDOM_STATE)
-        x_resampled, y_resampled = rus.fit_resample(x_train, y_train)
-        return x_resampled, y_resampled
-    
     print(f'Before undersampling train set: zeros: {np.count_nonzero(y_train == 0)}, ones: {np.count_nonzero(y_train == 1)}')
 
     try:
@@ -160,7 +107,7 @@ if __name__ == "__main__":
     x_train_scaled = scaler.fit_transform(x_train)
     x_val_scaled = scaler.transform(x_val)
 
-    print(f"[END] CREATE FEATURES - {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}")
+    print(f"[END] READ DATA - {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}")
 
     # ─────────────────────────────────────────────
     # TRAIN MODEL
@@ -323,7 +270,7 @@ if __name__ == "__main__":
         if not os.path.exists(path):
             os.makedirs(path)
 
-    results_base = f"results/{split_type}/{dataset}"
+    results_base = f"results_baseline/{split_type}/{dataset}"
     model_dir = f"{results_base}/best_model"
     params_dir = f"{results_base}/best_params"
     metrics_dir = f"{results_base}/metrics"
