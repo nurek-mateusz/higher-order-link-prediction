@@ -7,12 +7,13 @@ Run `python read_simplices_data.py <SPLIT_TYPE>`
 where `<SPLIT_TYPE>` is `time` (split based on time) or `events` (split based on number of events)
 
 ## Model training
-Run `python train_model.py <DATASET> <MODEL_NAME> <SPLIT_TYPE>`
+Run `python train_model.py <DATASET> <MODEL_NAME> <SPLIT_TYPE> <WITH_MOTIFS>`
 
 where:
 - `<DATASET>` is one of `coauth-MAG-Geology`, `coauth-MAG-History`, `contact-high-school`, `contact-primary-school`, `contact-primary-school-2`, `email-Enron`, `email-Eu`, `NDC-classes`, `NDC-substances`, `tags-ask-ubuntu`, `threads-ask-ubuntu`
-- `<MODEL_NAME>` is one of `rf` (Random Forest), `xgb` (XGBoost), `dt` (Decision Tree), `lr` (Logistic Regression), `svm` (Support Vector Machine), `knn` (K-Nearest Neighbors)
+- `<MODEL_NAME>` is one of `rf` (Random Forest), `xgb` (XGBoost), `lr` (Logistic Regression)
 - `<SPLIT_TYPE>` is `time` (split based on time) or `events` (split based on number of events)
+- `<WITH_MOTIFS>` is `y` (our features + all [motif features from the Rongmei article](https://www.sciencedirect.com/science/article/abs/pii/S0957417424031518)) or `n` (only our features)
 
 ## Baseline model
 Go to the `baseline` directory.
@@ -29,7 +30,7 @@ Run the script `python train_model.py` in `baseline` directory similar to the ab
 
 # Results
 Results obtained for the test set are saved in:
-- Our model: `results/<SPLIT_TYPE>/<DATASET>/metrics/test_<MODEL_NAME>.csv`
+- Our model: `results_our/<SPLIT_TYPE>/<DATASET>/metrics/test_<MODEL_NAME>.csv` and `results_our_and_motifs/<SPLIT_TYPE>/<DATASET>/metrics/test_<MODEL_NAME>.csv`
 - Baseline model: `baseline/results_baseline/<SPLIT_TYPE>/<DATASET>/metrics/test_<MODEL_NAME>.csv`
 
 # Additional scripts:
