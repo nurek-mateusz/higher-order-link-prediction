@@ -1,7 +1,8 @@
-import compute_features as cf
+import compute_features_update as cf
 import os
 import sys
 import numpy as np
+import pandas as pd
 import random
 import pickle
 from datetime import datetime
@@ -15,6 +16,81 @@ import xgboost as xgb
 from sklearn.metrics import average_precision_score
 from sklearn.metrics import roc_auc_score
 from sklearn.preprocessing import MinMaxScaler
+import shap
+import matplotlib.pyplot as plt
+
+
+# Function to read the training and testing data from pickle files
+def read_motif_features(dataset, split_type, s):
+    with open('processing_dataset/' + split_type + '/' + dataset + '/' + s + '_mean.pickle', 'rb') as f:
+        x = pickle.load(f)
+
+    with open('processing_dataset/' + split_type + '/' + dataset + '/y_' + s + '.pickle', 'rb') as f:
+        y = pickle.load(f)
+
+    return x, y
+
+def prepare_our_and_motif_features(x_train_our, x_val_our, x_test_our, y_train_our, y_val_our, y_test_our):
+        x_train_our = pd.DataFrame(x_train_our)
+        x_val_our = pd.DataFrame(x_val_our)
+        x_test_our = pd.DataFrame(x_test_our)
+        
+        # Read training and testing data
+        x_train_motifs, y_train_motifs = read_motif_features(dataset, split_type, 'train')
+        x_val_motifs, y_val_motifs = read_motif_features(dataset, split_type, 'val')
+        x_test_motifs, y_test_motifs = read_motif_features(dataset, split_type, 'test')
+
+        if (x_train_motifs.shape[0] != x_train_our.shape[0]) or (x_val_motifs.shape[0] != x_val_our.shape[0]) or (x_test_motifs.shape[0] != x_test_our.shape[0]):
+            raise ValueError(f'X shape mismatch! x_train_motifs.shape[0]={x_train_motifs.shape[0]}, x_train_our.shape[0]={x_train_our.shape[0]}, x_val_motifs.shape[0]={x_val_motifs.shape[0]}, x_val_our.shape[0]={x_val_our.shape[0]}, x_test_motifs.shape[0]={x_test_motifs.shape[0]}, x_test_our.shape[0]={x_test_our.shape[0]}')
+        if (y_train_motifs != y_train_our) or (y_val_motifs != y_val_our) or (y_test_motifs != y_test_our):
+            raise ValueError(f'Y shape/label order mismatch! y_train_motifs != y_train_our: {y_train_motifs != y_train_our}, y_val_motifs != y_val_our: {y_val_motifs != y_val_our}, y_test_motifs != y_test_our: {y_test_motifs != y_test_our}')
+        
+        x_train = pd.merge(x_train_our, x_train_motifs, left_on='triangle', right_on='index', how='inner').iloc[:,1:].to_numpy()
+        x_val = pd.merge(x_val_our, x_val_motifs, left_on='triangle', right_on='index', how='inner').iloc[:,1:].to_numpy()
+        x_test = pd.merge(x_test_our, x_test_motifs, left_on='triangle', right_on='index', how='inner').iloc[:,1:].to_numpy()
+
+        return x_train, x_val, x_test, np.array(y_train_our), np.array(y_val_our), np.array(y_test_our)
+
+def prepare_our_features(features_train, features_val, features_test, y_train, y_val, y_test):
+        feature_names = ['hcn', 'degree_reinforcement', 'weight_reinforcement', 'pairwise_timescale_density', 
+                         'timescale_density_balance', 'degree_balance', 'weight_balance', 'lifetime_one_edge', 'lifetime_two_edges']
+
+        # Training set features
+        x_train = []
+        for i, item in enumerate(features_train):
+            features = [item[feature] for feature in feature_names]
+            x_train.append(features)
+        x_train = np.array(x_train)
+
+        # Validation set features
+        x_val = []
+        for i, item in enumerate(features_val):
+            features = [item[feature] for feature in feature_names]
+            x_val.append(features)
+        x_val = np.array(x_val)
+
+        # Test set features
+        x_test = []
+        for item in features_test:
+            features = [item[feature] for feature in feature_names]
+            x_test.append(features)
+        x_test = np.array(x_test)
+
+        return x_train, x_val, x_test, np.array(y_train), np.array(y_val), np.array(y_test)
+
+def prepare_motif_features():
+    # Read training and testing data
+        x_train_motifs, y_train_motifs = read_motif_features(dataset, split_type, 'train')
+        x_val_motifs, y_val_motifs = read_motif_features(dataset, split_type, 'val')
+        x_test_motifs, y_test_motifs = read_motif_features(dataset, split_type, 'test')
+
+        return x_train_motifs, x_val_motifs, x_test_motifs, np.array(y_train_motifs), np.array(y_val_motifs), np.array(y_test_motifs)
+
+# Negative edge undersampling
+def under_sample(x_train, y_train, ratio=1):
+    rus = RandomUnderSampler(sampling_strategy=ratio, random_state=RANDOM_STATE)
+    x_resampled, y_resampled = rus.fit_resample(x_train, y_train)
+    return x_resampled, y_resampled
 
 
 if __name__ == "__main__":
@@ -31,7 +107,7 @@ if __name__ == "__main__":
     # PARSE ARGUMENTS
     # ─────────────────────────────────────────────
 
-    if len(sys.argv) != 4:
+    if len(sys.argv) != 5:
         raise Exception('Wrong number of arguments')
 
     dataset = sys.argv[1]
@@ -46,16 +122,22 @@ if __name__ == "__main__":
     # svm - Support Vector Machine
     # knn - K-Nearest Neighbors
     model_name = sys.argv[2]
-    if model_name not in ['rf', 'xgb', 'dt', 'lr', 'svm', 'knn']:
+    if model_name not in ['rf', 'xgb', 'dt', 'lr']:
         raise Exception('Wrong model name')
     
     # Split data based on time or number of events
     split_type = sys.argv[3]
     if split_type not in ['time', 'events']:
         raise Exception('Wrong split type')
+    
+    # Are motif features included?
+    with_motifs = sys.argv[4]
+    if with_motifs not in ['y', 'n']:
+        raise Exception('Wrong with_motifs value')
+    else:
+        with_motifs = True if with_motifs == 'y' else False
 
-
-    print(f'PARAMS: {dataset} {model_name} {split_type}')
+    print(f'PARAMS: {dataset} {model_name} {split_type} {with_motifs}')
 
     # ─────────────────────────────────────────────
     # READ DATA
@@ -81,15 +163,12 @@ if __name__ == "__main__":
     # Read labels
     with open(f'processing_dataset/{split_type}/{dataset}/y_train.pickle', 'rb') as file:
         y_train = pickle.load(file)
-        y_train = np.array(y_train)
 
     with open(f'processing_dataset/{split_type}/{dataset}/y_val.pickle', 'rb') as file:
         y_val = pickle.load(file)
-        y_val = np.array(y_val)
 
     with open(f'processing_dataset/{split_type}/{dataset}/y_test.pickle', 'rb') as file:
         y_test = pickle.load(file)
-        y_test = np.array(y_test)
 
     # Get candidate open triangles
     candidates_train = generator_train.generate_candidate_triangles('train')
@@ -109,41 +188,23 @@ if __name__ == "__main__":
     features_val = generator_val.calculate_triangle_features(candidates_val)
     features_test = generator_test.calculate_triangle_features(candidates_test)
 
-    # Convert features to numpy format
+    # ─────────────────────────────────────────────
+    # PREPARE FEATURES AND LABELS AS NUMPY ARRAYS
+    # ─────────────────────────────────────────────
 
-    feature_names = ['intensity', 'lifetime', 'internal_density', 'structural_imbalance', 'reinforcement']
-
-    # Training set features
-    x_train = []
-    for i, item in enumerate(features_train):
-        features = [item[feature] for feature in feature_names]
-        x_train.append(features)
-    x_train = np.array(x_train)
-
-    # Validation set features
-    x_val = []
-    for i, item in enumerate(features_val):
-        features = [item[feature] for feature in feature_names]
-        x_val.append(features)
-    x_val = np.array(x_val)
-
-    # Test set features
-    x_test = []
-    for item in features_test:
-        features = [item[feature] for feature in feature_names]
-        x_test.append(features)
-    x_test = np.array(x_test)
+    if with_motifs:
+        x_train, x_val, x_test, y_train, y_val, y_test = prepare_our_and_motif_features(features_train, features_val, features_test, y_train, y_val, y_test)
+    else:
+        x_train, x_val, x_test, y_train, y_val, y_test = prepare_our_features(features_train, features_val, features_test, y_train, y_val, y_test)
 
     print(f'{len(x_train)}, {len(y_train)}')
     print(f'{len(x_val)}, {len(y_val)}')
     print(f'{len(x_test)}, {len(y_test)}')
-
-    # Negative edge undersampling
-    def under_sample(x_train, y_train, ratio=1):
-        rus = RandomUnderSampler(sampling_strategy=ratio, random_state=RANDOM_STATE)
-        x_resampled, y_resampled = rus.fit_resample(x_train, y_train)
-        return x_resampled, y_resampled
     
+    # ─────────────────────────────────────────────
+    # UNDERSAMPLING AND NORMALIZATION
+    # ─────────────────────────────────────────────
+
     print(f'Before undersampling train set: zeros: {np.count_nonzero(y_train == 0)}, ones: {np.count_nonzero(y_train == 1)}')
 
     try:
@@ -205,19 +266,6 @@ if __name__ == "__main__":
             'n_jobs': [-1],
             'random_state': [RANDOM_STATE],
         }
-    elif model_name == 'dt':
-        model_constructor = DecisionTreeClassifier
-        param_dist = {
-            'criterion': ['gini', 'entropy'],
-            'max_depth': [None, 5, 10, 20, 40],
-            'min_samples_split': [2, 5, 10, 20],
-            'min_samples_leaf': [1, 2, 5, 10],
-            'max_features': [None, 'sqrt', 'log2'],
-            'min_impurity_decrease': [0.0, 0.001, 0.01],
-            'ccp_alpha': [0.0, 0.001, 0.01],
-            'class_weight': [None, 'balanced', {0:1, 1:3}, {0:1, 1:6}, {0:1, 1:10}],
-            'random_state': [RANDOM_STATE],
-        }
     elif model_name == 'lr':
         model_constructor = LogisticRegression
         param_dist = {
@@ -228,29 +276,6 @@ if __name__ == "__main__":
             'fit_intercept': [True, False],
             'class_weight': [None, 'balanced', {0:1, 1:2}, {0:1, 1:3}, {0:1, 1:5}, {0:1, 1:10}],
             'random_state': [RANDOM_STATE],
-        }  
-    elif model_name == 'svm':
-        model_constructor = SVC
-        param_dist = {
-            'C': np.logspace(-2, 2, 9),
-            'kernel': ['linear', 'rbf'],
-            'gamma': ['scale', 'auto'] + list(np.logspace(-3, 1, 7)),
-            'class_weight': [None, 'balanced', {0:1, 1:3}, {0:1, 1:6}, {0:1, 1:10}],
-            'probability': [True],
-            'max_iter': [2000, 5000],
-            'tol': [1e-4, 1e-3],
-            # do not include n_jobs or random_state; SVC doesn't support them
-        }
-    elif model_name == 'knn':
-        model_constructor = KNeighborsClassifier
-        param_dist = {
-            'n_neighbors': list(range(3, 31, 2)),
-            'weights': ['uniform', 'distance'],
-            'algorithm': ['auto', 'kd_tree', 'ball_tree'],
-            'p': [1, 2],
-            'metric': ['euclidean', 'manhattan'],
-            'leaf_size': [20, 30, 40, 50],
-            'n_jobs': [-1],
         }
 
     best_score = 0
@@ -323,7 +348,8 @@ if __name__ == "__main__":
         if not os.path.exists(path):
             os.makedirs(path)
 
-    results_base = f"results/{split_type}/{dataset}"
+    feature_set = 'our_and_motifs' if with_motifs else 'our'
+    results_base = f"results_{feature_set}/{split_type}/{dataset}"
     model_dir = f"{results_base}/best_model"
     params_dir = f"{results_base}/best_params"
     metrics_dir = f"{results_base}/metrics"
@@ -345,3 +371,55 @@ if __name__ == "__main__":
         pickle.dump(model, f, protocol=pickle.HIGHEST_PROTOCOL)
 
     print(f"[END] SAVE RESULTS - {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}")
+
+    # ─────────────────────────────────────────────
+    # SHAP ANALYSIS
+    # ─────────────────────────────────────────────
+
+    print(f"[START] SHAP - {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}")
+    if with_motifs:
+        feature_names = ['hcn', 'degree_reinforcement', 'weight_reinforcement',
+        'pairwise_timescale_density', 'timescale_density_balance',
+        'degree_balance', 'weight_balance', 'lifetime_one_edge', 'lifetime_two_edges', '0_swa', '0_swg',
+        '0_swh', '1_swa', '1_swg', '1_swh', '2_swa', '2_swg', '2_swh', '3_swa',
+        '3_swg', '3_swh', '4_swa', '4_swg', '4_swh', '5_swa', '5_swg', '5_swh',
+        '6_swa', '6_swg', '6_swh', '7_swa', '7_swg', '7_swh', '8_swa', '8_swg',
+        '8_swh', '9_swa', '9_swg', '9_swh', '10_swa', '10_swg', '10_swh',
+        '11_swa', '11_swg', '11_swh', '12_swa', '12_swg', '12_swh', '13_swa',
+        '13_swg', '13_swh', '14_swa', '14_swg', '14_swh', '15_swa', '15_swg',
+        '15_swh', '16_swa', '16_swg', '16_swh', '17_swa', '17_swg', '17_swh',
+        '18_swa', '18_swg', '18_swh', '19_swa', '19_swg', '19_swh', '20_swa',
+        '20_swg', '20_swh', '21_swa', '21_swg', '21_swh', '22_swa', '22_swg',
+        '22_swh', '23_swa', '23_swg', '23_swh', '24_swa', '24_swg', '24_swh']
+    else:
+        feature_names = ['hcn', 'degree_reinforcement', 'weight_reinforcement',
+        'pairwise_timescale_density', 'timescale_density_balance',
+        'degree_balance', 'weight_balance', 'lifetime_one_edge', 'lifetime_two_edges']
+    
+    def plot_shap(shap_obj, title, X_data):
+        plt.figure()
+        plt.title(title)
+        shap.summary_plot(shap_obj, X_data, show=False)
+        plt.savefig(f'{metrics_dir}/shap_{model_name}.pdf', bbox_inches='tight')
+        plt.close()
+
+    if model_name == 'xgb':
+        explainer_xgb = shap.TreeExplainer(model)
+        shap_values_xgb = explainer_xgb(x_test)
+        shap_values_xgb.feature_names = feature_names
+        plot_shap(shap_values_xgb, "XGBoost", x_test)
+
+    if model_name == 'rf':
+        explainer_rf = shap.TreeExplainer(model)
+        shap_values_rf = explainer_rf(x_test)
+        shap_values_rf = shap_values_rf[:, :, 1]
+        shap_values_rf.feature_names = feature_names
+        plot_shap(shap_values_rf, "Random Forest", x_test)
+
+    if model_name == 'lr':
+        explainer_log = shap.LinearExplainer(model, x_val)
+        shap_values_log = explainer_log(x_test)
+        shap_values_log.feature_names = feature_names
+        plot_shap(shap_values_log, "Logistic Regression", x_test)
+
+        print(f"[END] SHAP - {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}")

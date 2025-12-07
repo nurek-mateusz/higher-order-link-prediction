@@ -28,7 +28,6 @@ def under_sample(x_train, y_train, ratio=1):
 def read_data(dataset, split_type, s):
     with open('../processing_dataset/' + split_type + '/' + dataset + '/' + s + '_mean.pickle', 'rb') as f:
         x = pickle.load(f)
-    # x = x.apply(lambda a: (a - a.min()) / (a.max() - a.min()))  # Normalize data
 
     with open('../processing_dataset/' + split_type + '/' + dataset + '/y_' + s + '.pickle', 'rb') as f:
         y = pickle.load(f)
