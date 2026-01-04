@@ -1,4 +1,5 @@
 import compute_features_update as cf
+import prepare_features as pf
 import os
 import sys
 import numpy as np
@@ -20,72 +21,6 @@ import shap
 import matplotlib.pyplot as plt
 
 
-# Function to read the training and testing data from pickle files
-def read_motif_features(dataset, split_type, s):
-    with open('processing_dataset/' + split_type + '/' + dataset + '/' + s + '_mean.pickle', 'rb') as f:
-        x = pickle.load(f)
-
-    with open('processing_dataset/' + split_type + '/' + dataset + '/y_' + s + '.pickle', 'rb') as f:
-        y = pickle.load(f)
-
-    return x, y
-
-def prepare_our_and_motif_features(x_train_our, x_val_our, x_test_our, y_train_our, y_val_our, y_test_our):
-        x_train_our = pd.DataFrame(x_train_our)
-        x_val_our = pd.DataFrame(x_val_our)
-        x_test_our = pd.DataFrame(x_test_our)
-        
-        # Read training and testing data
-        x_train_motifs, y_train_motifs = read_motif_features(dataset, split_type, 'train')
-        x_val_motifs, y_val_motifs = read_motif_features(dataset, split_type, 'val')
-        x_test_motifs, y_test_motifs = read_motif_features(dataset, split_type, 'test')
-
-        if (x_train_motifs.shape[0] != x_train_our.shape[0]) or (x_val_motifs.shape[0] != x_val_our.shape[0]) or (x_test_motifs.shape[0] != x_test_our.shape[0]):
-            raise ValueError(f'X shape mismatch! x_train_motifs.shape[0]={x_train_motifs.shape[0]}, x_train_our.shape[0]={x_train_our.shape[0]}, x_val_motifs.shape[0]={x_val_motifs.shape[0]}, x_val_our.shape[0]={x_val_our.shape[0]}, x_test_motifs.shape[0]={x_test_motifs.shape[0]}, x_test_our.shape[0]={x_test_our.shape[0]}')
-        if (y_train_motifs != y_train_our) or (y_val_motifs != y_val_our) or (y_test_motifs != y_test_our):
-            raise ValueError(f'Y shape/label order mismatch! y_train_motifs != y_train_our: {y_train_motifs != y_train_our}, y_val_motifs != y_val_our: {y_val_motifs != y_val_our}, y_test_motifs != y_test_our: {y_test_motifs != y_test_our}')
-        
-        x_train = pd.merge(x_train_our, x_train_motifs, left_on='triangle', right_on='index', how='inner').iloc[:,1:].to_numpy()
-        x_val = pd.merge(x_val_our, x_val_motifs, left_on='triangle', right_on='index', how='inner').iloc[:,1:].to_numpy()
-        x_test = pd.merge(x_test_our, x_test_motifs, left_on='triangle', right_on='index', how='inner').iloc[:,1:].to_numpy()
-
-        return x_train, x_val, x_test, np.array(y_train_our), np.array(y_val_our), np.array(y_test_our)
-
-def prepare_our_features(features_train, features_val, features_test, y_train, y_val, y_test):
-        feature_names = ['hcn', 'degree_reinforcement', 'weight_reinforcement', 'pairwise_timescale_density', 
-                         'timescale_density_balance', 'degree_balance', 'weight_balance', 'lifetime_one_edge', 'lifetime_two_edges']
-
-        # Training set features
-        x_train = []
-        for i, item in enumerate(features_train):
-            features = [item[feature] for feature in feature_names]
-            x_train.append(features)
-        x_train = np.array(x_train)
-
-        # Validation set features
-        x_val = []
-        for i, item in enumerate(features_val):
-            features = [item[feature] for feature in feature_names]
-            x_val.append(features)
-        x_val = np.array(x_val)
-
-        # Test set features
-        x_test = []
-        for item in features_test:
-            features = [item[feature] for feature in feature_names]
-            x_test.append(features)
-        x_test = np.array(x_test)
-
-        return x_train, x_val, x_test, np.array(y_train), np.array(y_val), np.array(y_test)
-
-def prepare_motif_features():
-    # Read training and testing data
-        x_train_motifs, y_train_motifs = read_motif_features(dataset, split_type, 'train')
-        x_val_motifs, y_val_motifs = read_motif_features(dataset, split_type, 'val')
-        x_test_motifs, y_test_motifs = read_motif_features(dataset, split_type, 'test')
-
-        return x_train_motifs, x_val_motifs, x_test_motifs, np.array(y_train_motifs), np.array(y_val_motifs), np.array(y_test_motifs)
-
 # Negative edge undersampling
 def under_sample(x_train, y_train, ratio=1):
     rus = RandomUnderSampler(sampling_strategy=ratio, random_state=RANDOM_STATE)
@@ -100,14 +35,17 @@ if __name__ == "__main__":
 
     # dataset = 'email-Enron'
     # model_name = 'lr'
-    n_iter = 500 # Number of random combinations to try for hyperparameters
+    # split_type = 'time'
+    # feature_type = 'o'
+    # n_motifs = -1
 
+    n_iter = 500 # Number of random combinations to try for hyperparameters
 
     # ─────────────────────────────────────────────
     # PARSE ARGUMENTS
     # ─────────────────────────────────────────────
 
-    if len(sys.argv) != 5:
+    if len(sys.argv) != 6:
         raise Exception('Wrong number of arguments')
 
     dataset = sys.argv[1]
@@ -117,12 +55,9 @@ if __name__ == "__main__":
 
     # rf - Random Forest
     # xgb - XGBoost
-    # dt - Decision Tree
     # lr - Logistic Regression
-    # svm - Support Vector Machine
-    # knn - K-Nearest Neighbors
     model_name = sys.argv[2]
-    if model_name not in ['rf', 'xgb', 'dt', 'lr']:
+    if model_name not in ['rf', 'xgb', 'lr']:
         raise Exception('Wrong model name')
     
     # Split data based on time or number of events
@@ -130,80 +65,64 @@ if __name__ == "__main__":
     if split_type not in ['time', 'events']:
         raise Exception('Wrong split type')
     
-    # Are motif features included?
-    with_motifs = sys.argv[4]
-    if with_motifs not in ['y', 'n']:
-        raise Exception('Wrong with_motifs value')
-    else:
-        with_motifs = True if with_motifs == 'y' else False
+    # o - our features
+    # m - motif features
+    # b - both, our and motif features
+    feature_type = sys.argv[4]
+    if feature_type not in ['o', 'm', 'b']:
+        raise Exception('Wrong feature_type value')
+    
+    n_motifs = sys.argv[5]
+    try:
+        n_motifs = int(n_motifs)
+    except ValueError:
+        raise Exception("n_motifs is not an integer")
 
-    print(f'PARAMS: {dataset} {model_name} {split_type} {with_motifs}')
+    if n_motifs not in [-1, 1, 3, 5, 10, 20, 40, 75]:
+        raise Exception("The n_motifs must be in [-1, 1, 3, 5, 10, 20, 40, 75]")
 
-    # ─────────────────────────────────────────────
-    # READ DATA
-    # ─────────────────────────────────────────────
-
-    print(f"[START] READ DATA - {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}")
-
-    # Read simplices
-    cores = os.cpu_count()
-
-    # Training set
-    generator_train = cf.DataPreparation(n_workers=cores, dataset=dataset, split_type=split_type)
-    generator_train.build_data_structures('train')
-
-    # Validation set
-    generator_val = cf.DataPreparation(n_workers=cores, dataset=dataset, split_type=split_type)
-    generator_val.build_data_structures('val')
-
-    # Test set
-    generator_test = cf.DataPreparation(n_workers=cores, dataset=dataset, split_type=split_type)
-    generator_test.build_data_structures('test')
-
-    # Read labels
-    with open(f'processing_dataset/{split_type}/{dataset}/y_train.pickle', 'rb') as file:
-        y_train = pickle.load(file)
-
-    with open(f'processing_dataset/{split_type}/{dataset}/y_val.pickle', 'rb') as file:
-        y_val = pickle.load(file)
-
-    with open(f'processing_dataset/{split_type}/{dataset}/y_test.pickle', 'rb') as file:
-        y_test = pickle.load(file)
-
-    # Get candidate open triangles
-    candidates_train = generator_train.generate_candidate_triangles('train')
-    candidates_val = generator_val.generate_candidate_triangles('val')
-    candidates_test = generator_test.generate_candidate_triangles('test')
-
-    print(f"[END] READ DATA - {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}")
+    print(f'PARAMS: {dataset} {model_name} {split_type} {feature_type} {n_motifs}')
 
     # ─────────────────────────────────────────────
     # CREATE FEATURES
     # ─────────────────────────────────────────────
 
     print(f"[START] CREATE FEATURES - {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}")
-    
-    # Compute features
-    features_train = generator_train.calculate_triangle_features(candidates_train)
-    features_val = generator_val.calculate_triangle_features(candidates_val)
-    features_test = generator_test.calculate_triangle_features(candidates_test)
 
-    # ─────────────────────────────────────────────
-    # PREPARE FEATURES AND LABELS AS NUMPY ARRAYS
-    # ─────────────────────────────────────────────
+    n_cores = os.cpu_count()
 
-    if with_motifs:
-        x_train, x_val, x_test, y_train, y_val, y_test = prepare_our_and_motif_features(features_train, features_val, features_test, y_train, y_val, y_test)
+    if feature_type == 'o':
+        x_train, y_train = pf.create_our_features(dataset, split_type, 'train', n_cores)
+        x_val, y_val = pf.create_our_features(dataset, split_type, 'val', n_cores)
+        x_test, y_test = pf.create_our_features(dataset, split_type, 'test', n_cores)
+    elif feature_type == 'm':
+        x_train, y_train = pf.create_motif_features(dataset, split_type, 'train')
+        x_val, y_val = pf.create_motif_features(dataset, split_type, 'val')
+        x_test, y_test = pf.create_motif_features(dataset, split_type, 'test')
     else:
-        x_train, x_val, x_test, y_train, y_val, y_test = prepare_our_features(features_train, features_val, features_test, y_train, y_val, y_test)
+        x_train, y_train = pf.create_our_and_motif_features(dataset, model_name, split_type, 'train', n_cores, n_motifs)
+        x_val, y_val = pf.create_our_and_motif_features(dataset, model_name, split_type, 'val', n_cores, n_motifs)
+        x_test, y_test = pf.create_our_and_motif_features(dataset, model_name, split_type, 'test', n_cores, n_motifs)
 
-    print(f'{len(x_train)}, {len(y_train)}')
-    print(f'{len(x_val)}, {len(y_val)}')
-    print(f'{len(x_test)}, {len(y_test)}')
+    # Save feature names
+    feature_names = [col for col in x_test.columns if col != 'triangle']
+
+    # Convert to numpy
+    x_train, y_train = pf.convert_to_numpy_array(x_train, y_train)
+    x_val, y_val = pf.convert_to_numpy_array(x_val, y_val)
+    x_test, y_test = pf.convert_to_numpy_array(x_test, y_test)
     
+    print(f'x_train.shape={x_train.shape}, y_train.shape={y_train.shape}')
+    print(f'x_val.shape={x_val.shape}, y_val.shape={y_val.shape}')
+    print(f'x_test.shape={x_test.shape}, y_test.shape={y_test.shape}')
+    
+    print(f"[END] CREATE FEATURES - {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}")
+
     # ─────────────────────────────────────────────
     # UNDERSAMPLING AND NORMALIZATION
     # ─────────────────────────────────────────────
+
+    print(f"[START] UNDERSAMPLING AND NORMALIZATION - {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}")
 
     print(f'Before undersampling train set: zeros: {np.count_nonzero(y_train == 0)}, ones: {np.count_nonzero(y_train == 1)}')
 
@@ -221,7 +140,7 @@ if __name__ == "__main__":
     x_train_scaled = scaler.fit_transform(x_train)
     x_val_scaled = scaler.transform(x_val)
 
-    print(f"[END] CREATE FEATURES - {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}")
+    print(f"[END] UNDERSAMPLING AND NORMALIZATION - {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}")
 
     # ─────────────────────────────────────────────
     # TRAIN MODEL
@@ -329,9 +248,10 @@ if __name__ == "__main__":
 
     # Final evaluation on test set
     y_test_pred = model.predict_proba(x_test)[:, 1]
+
     avg_prec = average_precision_score(y_test, y_test_pred)
-    auc_score = roc_auc_score(y_test, y_test_pred)
     performance = avg_prec / (sum(y_test) / len(y_test)) # avg_prec / random_baseline
+    auc_score = roc_auc_score(y_test, y_test_pred)
 
     print('Test set:', 'Performance', round(performance, 4), 'AP', round(avg_prec, 4), 'AUC', round(auc_score, 4))
 
@@ -348,7 +268,16 @@ if __name__ == "__main__":
         if not os.path.exists(path):
             os.makedirs(path)
 
-    feature_set = 'our_and_motifs' if with_motifs else 'our'
+    if feature_type == 'o':
+        feature_set = 'our'
+        best_motifs = ''
+    elif feature_type == 'm':
+        feature_set = 'motifs'
+        best_motifs = ''
+    else:
+        feature_set = 'our_and_motifs'
+        best_motifs = f'_{n_motifs}' if n_motifs != -1 else '' # Add information how many motif features have been used
+
     results_base = f"results_{feature_set}/{split_type}/{dataset}"
     model_dir = f"{results_base}/best_model"
     params_dir = f"{results_base}/best_params"
@@ -358,16 +287,16 @@ if __name__ == "__main__":
         ensure_dir(d)
 
     # Save metrics
-    with open(f"{metrics_dir}/test_{model_name}.csv", "w") as f:
+    with open(f"{metrics_dir}/test_{model_name}{best_motifs}.csv", "w") as f:
         f.write("performance,avg_prec,auc\n")
         f.write(f"{performance},{avg_prec},{auc_score}\n")
 
     # Save best params
-    with open(f"{params_dir}/best_params_{model_name}.txt", "w") as f:
+    with open(f"{params_dir}/best_params_{model_name}{best_motifs}.txt", "w") as f:
         f.write(str(best_params))
 
     # Save best model
-    with open(f"{model_dir}/best_model_{model_name}.pkl", "wb") as f:
+    with open(f"{model_dir}/best_model_{model_name}{best_motifs}.pkl", "wb") as f:
         pickle.dump(model, f, protocol=pickle.HIGHEST_PROTOCOL)
 
     print(f"[END] SAVE RESULTS - {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}")
@@ -377,49 +306,59 @@ if __name__ == "__main__":
     # ─────────────────────────────────────────────
 
     print(f"[START] SHAP - {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}")
-    if with_motifs:
-        feature_names = ['hcn', 'degree_reinforcement', 'weight_reinforcement',
-        'pairwise_timescale_density', 'timescale_density_balance',
-        'degree_balance', 'weight_balance', 'lifetime_one_edge', 'lifetime_two_edges', '0_swa', '0_swg',
-        '0_swh', '1_swa', '1_swg', '1_swh', '2_swa', '2_swg', '2_swh', '3_swa',
-        '3_swg', '3_swh', '4_swa', '4_swg', '4_swh', '5_swa', '5_swg', '5_swh',
-        '6_swa', '6_swg', '6_swh', '7_swa', '7_swg', '7_swh', '8_swa', '8_swg',
-        '8_swh', '9_swa', '9_swg', '9_swh', '10_swa', '10_swg', '10_swh',
-        '11_swa', '11_swg', '11_swh', '12_swa', '12_swg', '12_swh', '13_swa',
-        '13_swg', '13_swh', '14_swa', '14_swg', '14_swh', '15_swa', '15_swg',
-        '15_swh', '16_swa', '16_swg', '16_swh', '17_swa', '17_swg', '17_swh',
-        '18_swa', '18_swg', '18_swh', '19_swa', '19_swg', '19_swh', '20_swa',
-        '20_swg', '20_swh', '21_swa', '21_swg', '21_swh', '22_swa', '22_swg',
-        '22_swh', '23_swa', '23_swg', '23_swh', '24_swa', '24_swg', '24_swh']
-    else:
-        feature_names = ['hcn', 'degree_reinforcement', 'weight_reinforcement',
-        'pairwise_timescale_density', 'timescale_density_balance',
-        'degree_balance', 'weight_balance', 'lifetime_one_edge', 'lifetime_two_edges']
-    
-    def plot_shap(shap_obj, title, X_data):
+        
+    def plot_shap(shap_obj, title, X_data, out_path):
         plt.figure()
         plt.title(title)
         shap.summary_plot(shap_obj, X_data, show=False)
-        plt.savefig(f'{metrics_dir}/shap_{model_name}.pdf', bbox_inches='tight')
+        plt.savefig(out_path, bbox_inches='tight')
         plt.close()
+
+    def save_shap_ranking(shap_obj, feature_names, out_path):
+        # shap_obj can be a shap.Explanation or a raw numpy array
+        if hasattr(shap_obj, 'values'):
+            vals = shap_obj.values
+        else:
+            vals = shap_obj
+
+        # For binary sklearn RF we already select class 1 => 2D matrix (n_samples, n_features)
+        # For any 3D (classes, samples, features), aggregate over classes
+        if vals.ndim == 3:
+            vals = np.mean(vals, axis=0)  # (n_samples, n_features)
+
+        mean_abs = np.abs(vals).mean(axis=0)
+
+        df = pd.DataFrame({
+            'feature_name': feature_names,
+            'mean_abs_shap': mean_abs
+        }).sort_values('mean_abs_shap', ascending=False).reset_index(drop=True)
+
+        df['rank'] = df.index + 1
+        df.to_csv(out_path, index=False)
+
+    shap_plot_path = f'{metrics_dir}/shap_{model_name}{best_motifs}.pdf'
+    shap_ranking_path = f'{metrics_dir}/shap_ranking_{model_name}{best_motifs}.csv'
 
     if model_name == 'xgb':
         explainer_xgb = shap.TreeExplainer(model)
         shap_values_xgb = explainer_xgb(x_test)
         shap_values_xgb.feature_names = feature_names
-        plot_shap(shap_values_xgb, "XGBoost", x_test)
+        plot_shap(shap_values_xgb, "XGBoost", x_test, shap_plot_path)
+        save_shap_ranking(shap_values_xgb, feature_names, shap_ranking_path)
 
     if model_name == 'rf':
         explainer_rf = shap.TreeExplainer(model)
         shap_values_rf = explainer_rf(x_test)
         shap_values_rf = shap_values_rf[:, :, 1]
         shap_values_rf.feature_names = feature_names
-        plot_shap(shap_values_rf, "Random Forest", x_test)
+        plot_shap(shap_values_rf, "Random Forest", x_test, shap_plot_path)
+        save_shap_ranking(shap_values_rf, feature_names, shap_ranking_path)
 
     if model_name == 'lr':
-        explainer_log = shap.LinearExplainer(model, x_val)
-        shap_values_log = explainer_log(x_test)
-        shap_values_log.feature_names = feature_names
-        plot_shap(shap_values_log, "Logistic Regression", x_test)
+        explainer_lr = shap.LinearExplainer(model, x_val)
+        shap_values_lr = explainer_lr(x_test)
+        shap_values_lr.feature_names = feature_names
+        plot_shap(shap_values_lr, "Logistic Regression", x_test, shap_plot_path)
+        save_shap_ranking(shap_values_lr, feature_names, shap_ranking_path)
 
-        print(f"[END] SHAP - {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}")
+    print(f"[END] SHAP - {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}")

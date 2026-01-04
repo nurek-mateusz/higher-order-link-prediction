@@ -3,6 +3,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from collections import defaultdict
 import itertools
 import numpy as np
+import pandas as pd
 import gzip
 from pathlib import Path
 import math
@@ -780,5 +781,5 @@ class DataPreparation:
 
         
         print(f"Processed {len(features)}/{len(triangles)} successfully")
-        return features
+        return pd.DataFrame(features)
 
