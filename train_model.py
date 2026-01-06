@@ -45,7 +45,7 @@ if __name__ == "__main__":
     # PARSE ARGUMENTS
     # ─────────────────────────────────────────────
 
-    if len(sys.argv) != 6:
+    if len(sys.argv) not in [5,6]:
         raise Exception('Wrong number of arguments')
 
     dataset = sys.argv[1]
@@ -72,11 +72,14 @@ if __name__ == "__main__":
     if feature_type not in ['o', 'm', 'b']:
         raise Exception('Wrong feature_type value')
     
-    n_motifs = sys.argv[5]
-    try:
-        n_motifs = int(n_motifs)
-    except ValueError:
-        raise Exception("n_motifs is not an integer")
+    if len(sys.argv) == 5:
+        n_motifs = -1
+    else:
+        n_motifs = sys.argv[5]
+        try:
+            n_motifs = int(n_motifs)
+        except ValueError:
+            raise Exception("n_motifs is not an integer")
 
     if n_motifs not in [-1, 1, 3, 5, 10, 20, 40, 75]:
         raise Exception("The n_motifs must be in [-1, 1, 3, 5, 10, 20, 40, 75]")
@@ -96,13 +99,13 @@ if __name__ == "__main__":
         x_val, y_val = pf.create_our_features(dataset, split_type, 'val', n_cores)
         x_test, y_test = pf.create_our_features(dataset, split_type, 'test', n_cores)
     elif feature_type == 'm':
-        x_train, y_train = pf.create_motif_features(dataset, split_type, 'train')
-        x_val, y_val = pf.create_motif_features(dataset, split_type, 'val')
-        x_test, y_test = pf.create_motif_features(dataset, split_type, 'test')
+        x_train, y_train = pf.create_motif_features(dataset, model_name, split_type, 'train', n_motifs, feature_type)
+        x_val, y_val = pf.create_motif_features(dataset, model_name, split_type, 'val', n_motifs, feature_type)
+        x_test, y_test = pf.create_motif_features(dataset, model_name, split_type, 'test', n_motifs, feature_type)
     else:
-        x_train, y_train = pf.create_our_and_motif_features(dataset, model_name, split_type, 'train', n_cores, n_motifs)
-        x_val, y_val = pf.create_our_and_motif_features(dataset, model_name, split_type, 'val', n_cores, n_motifs)
-        x_test, y_test = pf.create_our_and_motif_features(dataset, model_name, split_type, 'test', n_cores, n_motifs)
+        x_train, y_train = pf.create_our_and_motif_features(dataset, model_name, split_type, 'train', n_cores, n_motifs, feature_type)
+        x_val, y_val = pf.create_our_and_motif_features(dataset, model_name, split_type, 'val', n_cores, n_motifs, feature_type)
+        x_test, y_test = pf.create_our_and_motif_features(dataset, model_name, split_type, 'test', n_cores, n_motifs, feature_type)
 
     # Save feature names
     feature_names = [col for col in x_test.columns if col != 'triangle']
@@ -273,7 +276,7 @@ if __name__ == "__main__":
         best_motifs = ''
     elif feature_type == 'm':
         feature_set = 'motifs'
-        best_motifs = ''
+        best_motifs = f'_{n_motifs}' if n_motifs != -1 else '' # Add information how many motif features have been used
     else:
         feature_set = 'our_and_motifs'
         best_motifs = f'_{n_motifs}' if n_motifs != -1 else '' # Add information how many motif features have been used
