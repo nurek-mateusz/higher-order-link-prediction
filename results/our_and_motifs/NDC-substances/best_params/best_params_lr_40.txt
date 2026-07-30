@@ -1,1 +1,0 @@
-{'penalty': 'l1', 'C': np.float64(0.23357214690901212), 'solver': 'liblinear', 'max_iter': 500, 'fit_intercept': False, 'class_weight': {0: 1, 1: 2}, 'random_state': 0}

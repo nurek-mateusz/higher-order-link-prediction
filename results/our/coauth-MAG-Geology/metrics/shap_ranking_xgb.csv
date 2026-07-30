@@ -1,0 +1,10 @@
+feature_name,mean_abs_shap,rank
+pairwise_timescale_density,0.3383949,1
+hcn,0.3371033,2
+weight_reinforcement,0.21739908,3
+degree_reinforcement,0.21139756,4
+lifetime_one_edge,0.16362265,5
+weight_balance,0.04740435,6
+lifetime_two_edges,0.023668984,7
+timescale_density_balance,0.019873703,8
+degree_balance,0.0067839655,9

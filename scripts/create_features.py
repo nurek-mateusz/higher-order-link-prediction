@@ -1,6 +1,7 @@
 import multiprocessing
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from collections import defaultdict
+from itertools import combinations
 import numpy as np
 import pandas as pd
 import math
@@ -9,17 +10,18 @@ import os
 from datetime import datetime
 
 
-def process_triangle_worker(batch, simplices, node_to_simplices, node_to_times, node_time_to_neighbors, pair_to_times):
+def process_triangle_worker(batch, simplices, node_to_simplices, node_to_times, node_time_to_neighbors, pair_to_times,
+                            node_to_times_bins, node_time_to_neighbors_bins):
     try:
         results = []
         for triangle in batch:
             features = {
                 'triangle': triangle,
-                'hcn': calculate_HCN(triangle, simplices, node_to_times, node_time_to_neighbors),
+                'hcn': calculate_THCN(triangle, node_to_times_bins, node_time_to_neighbors_bins),
                 # 1-2 neighbor motifs
                 'degree_reinforcement': calculate_degree_reinforcement(triangle, node_to_simplices),
                 'weight_reinforcement': calculate_weight_reinforcement(triangle, node_to_simplices),
-                'pairwise_timescale_density': calculate_pairwise_timescale_density(triangle, node_to_times),
+                'pairwise_timescale_density': calculate_pairwise_timescale_density(triangle, pair_to_times),
                 'timescale_density_balance': calculate_timescale_density_balance(triangle, pair_to_times),
                 'degree_balance': calculate_degree_balance(triangle, node_to_simplices),
                 'weight_balance': calculate_weight_balance(triangle, node_to_simplices),
@@ -36,6 +38,22 @@ def process_triangle_worker(batch, simplices, node_to_simplices, node_to_times, 
 # 1-2 neighbor motifs
 
 # 1-1 HCN
+def calculate_THCN(triangle, node_to_times, node_time_to_neighbors):
+    # temporal higher-order common neighbor (THCN)
+    a,b,c = triangle
+    ta = node_to_times.get(a, set())
+    tb = node_to_times.get(b, set())
+    tc = node_to_times.get(c, set())
+    t_all = ta|tb|tc
+
+    CN_set = set()
+    for t in t_all:
+        na_t = node_time_to_neighbors.get((a, t), set())
+        nb_t = node_time_to_neighbors.get((b, t), set())
+        nc_t = node_time_to_neighbors.get((c, t), set())
+        CN_set.update(na_t & nb_t & nc_t)
+    return len(CN_set)
+
 def calculate_HCN(triangle, simplices, node_to_times, node_time_to_neighbors):
     node_a, node_b, node_c = triangle
     
@@ -272,6 +290,8 @@ class DataPreparation:
         self.node_to_times = defaultdict(set)
         self.node_time_to_neighbors = defaultdict(set)
         self.pair_to_times = defaultdict(set)
+        self.node_to_times_bins = defaultdict(set)
+        self.node_time_to_neighbors_bins = defaultdict(set)
 
         self.training_triangles = []
         self.test_pairs = []
@@ -289,7 +309,10 @@ class DataPreparation:
             simplices.extend(simplex)
             times.append(time)
 
-        data = {'nverts': nverts, 'simplices': simplices, 'times': times}
+        df = pd.read_csv('../results/summary_best_bins_THCN.csv')
+        best_bin = df.loc[df["dataset"] == dataset, "best_bin"].iloc[0]
+
+        data = {'nverts': nverts, 'simplices': simplices, 'times': times, 'best_bin': best_bin}
         
         self._build_simplex_data(data)
         self._build_node_labels_from_simplices()
@@ -298,6 +321,7 @@ class DataPreparation:
         self._build_node_to_times()
         self._build_node_time_to_neighbors()
         self._build_pair_to_times()
+        self._build_temporal_neighbor_bin(best_bin)
     
     def _build_node_labels_from_simplices(self):
         # Extract unique node IDs from all simplices
@@ -398,6 +422,57 @@ class DataPreparation:
         # Convert sets to sorted lists for faster later operations
         for pair in self.pair_to_times:
             self.pair_to_times[pair] = sorted(self.pair_to_times[pair])
+
+    def _build_ts_to_bin(self, bin):
+        if self.simplices is None:
+            return {}
+
+        ts = sorted({simplex['time'] for simplex in self.simplices})
+        if not ts:
+            return {}
+
+        min_ts = ts[0]
+        max_ts = ts[-1]
+        range_ts = max_ts - min_ts + 1
+
+        if bin is None or bin <= 0:
+            return {t: 0 for t in ts}  # all timestamps in one bin
+        if bin >= range_ts:
+            return {t: i for i, t in enumerate(ts)}  # each timestamp gets its own bin id
+
+        # fixed-width binning
+        # empty bins are allowed (timestamps may be sparse)
+        ts_to_bin = {}
+        for t in ts:
+            b = int((t - min_ts) / float(range_ts) * bin)
+            if b >= bin:  # edge case for max_ts
+                b = bin - 1
+            ts_to_bin[t] = b
+        return ts_to_bin
+
+    def _build_temporal_neighbor_bin(self, bin):
+        # Build temporal neighbors for each node based on simplices and timestamp bins.
+        # Output:
+        # - node_to_times: dict mapping node to set of time bins it appears in, e.g., {node1: {0, 1}, node2: {1}}
+        # - node_time_to_neighbors: dict mapping (node, time_bin) to set of neighboring nodes in the same time bin, e.g., {(node1, 0): {node2, node3}, (node1, 1): {node4}, (node2, 1): {node1}}
+        node_to_times = {}
+        node_time_to_neighbors = {}
+        # ts_to_bin is a dict mapping timestamp to bin id, e.g., {0: 0, 1: 0, 2: 1, 3: 1} for bin=2
+        ts_to_bin = self._build_ts_to_bin(bin)
+        for simplex in self.simplices:
+            ts = int(simplex['time'])  # timestamp is the first element of simplex
+            nodes = simplex['nodes']  # the rest are nodes list in the simplex
+            if len(nodes) < 2:
+                continue  # skip simplices with less than 2 nodes
+            t_bin = ts_to_bin.get(ts, 0) 
+            for u in nodes:
+                node_to_times.setdefault(u, set()).add(t_bin)
+            for u,v in combinations(nodes, 2):
+                node_time_to_neighbors.setdefault((u, t_bin), set()).add(v)
+                node_time_to_neighbors.setdefault((v, t_bin), set()).add(u)
+        
+        self.node_to_times_bins = node_to_times
+        self.node_time_to_neighbors_bins = node_time_to_neighbors
     
     def calculate_triangle_features(self, triangles):
         """
@@ -421,7 +496,9 @@ class DataPreparation:
                                        self.node_to_simplices,
                                        self.node_to_times,
                                        self.node_time_to_neighbors,
-                                       self.pair_to_times) for batch in batches]
+                                       self.pair_to_times,
+                                       self.node_to_times_bins,
+                                       self.node_time_to_neighbors_bins) for batch in batches]
            
             for future in futures:
                 result = future.result()

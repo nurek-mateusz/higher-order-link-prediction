@@ -15,6 +15,7 @@ from sklearn.metrics import roc_auc_score
 from sklearn.preprocessing import MinMaxScaler
 import shap
 import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
 
 
 # Negative edge undersampling
@@ -62,7 +63,7 @@ if __name__ == "__main__":
     if feature_type not in ['o', 'm', 'b']:
         raise Exception('Wrong feature_type value')
     
-    if len(sys.argv) == 4:
+    if len(sys.argv) == 4   :
         n_motifs = 75
     else:
         n_motifs = sys.argv[4]
@@ -314,11 +315,6 @@ if __name__ == "__main__":
         else:
             vals = shap_obj
 
-        # For binary sklearn RF we already select class 1 => 2D matrix (n_samples, n_features)
-        # For any 3D (classes, samples, features), aggregate over classes
-        if vals.ndim == 3:
-            vals = np.mean(vals, axis=0)  # (n_samples, n_features)
-
         mean_abs = np.abs(vals).mean(axis=0)
 
         df = pd.DataFrame({
@@ -329,29 +325,42 @@ if __name__ == "__main__":
         df['rank'] = df.index + 1
         df.to_csv(out_path, index=False)
 
+    def subsample_for_shap(X, y, n, seed):
+        if len(X) <= n:
+            return X
+        keep, _ = train_test_split(np.arange(len(X)), train_size=n, stratify=y, random_state=seed)
+        keep = np.sort(keep)
+        return X.iloc[keep] if hasattr(X, 'iloc') else X[keep]
+
     shap_plot_path = f'{metrics_dir}/shap_{model_name}{best_motifs}.pdf'
     shap_ranking_path = f'{metrics_dir}/shap_ranking_{model_name}{best_motifs}.csv'
 
+    SHAP_N = 10000
+    SHAP_SEED = 0
+    x_shap = subsample_for_shap(x_test, y_test, SHAP_N, SHAP_SEED)
+
     if model_name == 'xgb':
         explainer_xgb = shap.TreeExplainer(model)
-        shap_values_xgb = explainer_xgb(x_test)
+        shap_values_xgb = explainer_xgb(x_shap, check_additivity=False)
         shap_values_xgb.feature_names = feature_names
-        plot_shap(shap_values_xgb, "XGBoost", x_test, shap_plot_path)
+        plot_shap(shap_values_xgb, "XGBoost", x_shap, shap_plot_path)
         save_shap_ranking(shap_values_xgb, feature_names, shap_ranking_path)
 
     if model_name == 'rf':
         explainer_rf = shap.TreeExplainer(model)
-        shap_values_rf = explainer_rf(x_test)
+        shap_values_rf = explainer_rf(x_shap, check_additivity=False)
         shap_values_rf = shap_values_rf[:, :, 1]
         shap_values_rf.feature_names = feature_names
-        plot_shap(shap_values_rf, "Random Forest", x_test, shap_plot_path)
+        plot_shap(shap_values_rf, "Random Forest", x_shap, shap_plot_path)
         save_shap_ranking(shap_values_rf, feature_names, shap_ranking_path)
 
     if model_name == 'lr':
-        explainer_lr = shap.LinearExplainer(model, x_val)
-        shap_values_lr = explainer_lr(x_test)
+        explainer_lr = shap.LinearExplainer(
+            model, shap.maskers.Independent(x_val, max_samples=1000))
+        shap_values_lr = explainer_lr(x_shap)
         shap_values_lr.feature_names = feature_names
-        plot_shap(shap_values_lr, "Logistic Regression", x_test, shap_plot_path)
+        plot_shap(shap_values_lr, "Logistic Regression", x_shap, shap_plot_path)
         save_shap_ranking(shap_values_lr, feature_names, shap_ranking_path)
-
+    
     print(f"[END] SHAP - {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}")
+    

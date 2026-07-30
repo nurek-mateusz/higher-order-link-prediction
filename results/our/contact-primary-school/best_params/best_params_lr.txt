@@ -1,1 +1,1 @@
-{'penalty': 'l2', 'C': np.float64(11.288378916846883), 'solver': 'saga', 'max_iter': 500, 'fit_intercept': True, 'class_weight': None, 'random_state': 0}
+{'penalty': 'l1', 'C': np.float64(0.615848211066026), 'solver': 'saga', 'max_iter': 500, 'fit_intercept': True, 'class_weight': None, 'random_state': 0}
