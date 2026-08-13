@@ -1,0 +1,1 @@
+{'n_estimators': 400, 'max_depth': None, 'min_samples_split': 2, 'min_samples_leaf': 5, 'max_features': 'log2', 'bootstrap': True, 'oob_score': False, 'max_samples': None, 'min_impurity_decrease': 0.001, 'criterion': 'log_loss', 'ccp_alpha': 0.01, 'class_weight': 'balanced', 'n_jobs': -1, 'random_state': 0}

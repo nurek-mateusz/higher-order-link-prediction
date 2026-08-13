@@ -1,0 +1,1 @@
+{'n_estimators': 400, 'max_depth': None, 'min_samples_split': 2, 'min_samples_leaf': 1, 'max_features': 0.7, 'bootstrap': True, 'oob_score': True, 'max_samples': None, 'min_impurity_decrease': 0.0, 'criterion': 'entropy', 'ccp_alpha': 0.001, 'class_weight': 'balanced_subsample', 'n_jobs': -1, 'random_state': 0}
