@@ -6,6 +6,7 @@ import pickle
 import networkx as nx
 import numpy as np
 import itertools
+from utils import save_trg, save_simplices
 
 np.random.seed(0)
 
@@ -233,9 +234,9 @@ if __name__ == "__main__":
 
     for dataset in dataset_list:
         print(dataset)
-        fl_nm_nv = '../data/' + dataset + '/' + dataset + '-nverts.txt'
-        fl_nm_sp = '../data/' + dataset + '/' + dataset + '-simplices.txt'
-        fl_nm_tm = '../data/' + dataset + '/' + dataset + '-times.txt'
+        fl_nm_nv = '../data/raw/' + dataset + '/' + dataset + '-nverts.txt'
+        fl_nm_sp = '../data/raw/' + dataset + '/' + dataset + '-simplices.txt'
+        fl_nm_tm = '../data/raw/' + dataset + '/' + dataset + '-times.txt'
 
         nv_lis = split_file_to_list(fl_nm_nv)  # the number of vertices within each simplex
         sp_lis = split_file_to_list(fl_nm_sp)  # the nodes comprising the simplices
@@ -259,38 +260,15 @@ if __name__ == "__main__":
 
         # Save processed dataset
         save_dir = '../data/processed/' + dataset
-        if not os.path.isdir(save_dir):
-            os.makedirs(save_dir)
-        
-        with open(save_dir + '/trg_open_train.pickle', 'wb') as f:
-            pickle.dump(x_train_trg, f)
-        with open(save_dir + '/trg_closed_train.pickle', 'wb') as f:
-            pickle.dump(train_closed, f)
-        with open(save_dir + '/y_train.pickle', 'wb') as f:
-            pickle.dump(y_train, f)
-        with open(save_dir + '/G_train.pickle', 'wb') as f:
-            pickle.dump(G_train, f)
-        with open(save_dir + '/simplices_train.pickle', 'wb') as f:
-            pickle.dump(simplices_train, f)
+        os.makedirs(save_dir, exist_ok=True)
 
-        with open(save_dir + '/trg_open_val.pickle', 'wb') as f:
-            pickle.dump(x_val_trg, f)
-        with open(save_dir + '/trg_closed_val.pickle', 'wb') as f:
-            pickle.dump(val_closed, f)
-        with open(save_dir + '/y_val.pickle', 'wb') as f:
-            pickle.dump(y_val, f)
-        with open(save_dir + '/G_val.pickle', 'wb') as f:
-            pickle.dump(G_val, f)
-        with open(save_dir + '/simplices_val.pickle', 'wb') as f:
-            pickle.dump(simplices_val, f)
-
-        with open(save_dir + '/trg_open_test.pickle', 'wb') as f:
-            pickle.dump(x_test_trg, f)
-        with open(save_dir + '/trg_closed_test.pickle', 'wb') as f:
-            pickle.dump(test_closed, f)
-        with open(save_dir + '/y_test.pickle', 'wb') as f:
-            pickle.dump(y_test, f)
-        with open(save_dir + '/G_test.pickle', 'wb') as f:
-            pickle.dump(G_test, f)
-        with open(save_dir + '/simplices_test.pickle', 'wb') as f:
-            pickle.dump(simplices_test, f)
+        for split, trg, closed, y, G, simp in [
+            ('train', x_train_trg, train_closed, y_train, G_train, simplices_train),
+            ('val',   x_val_trg,   val_closed,   y_val,   G_val,   simplices_val),
+            ('test',  x_test_trg,  test_closed,  y_test,  G_test,  simplices_test),
+        ]:
+            save_trg(trg, y, f'{save_dir}/trg_open_{split}.parquet')
+            save_trg(closed, None, f'{save_dir}/trg_closed_{split}.parquet')
+            save_simplices(simp, f'{save_dir}/simplices_{split}.parquet')
+            with open(f'{save_dir}/G_{split}.pickle', 'wb') as f:
+                pickle.dump(G, f)

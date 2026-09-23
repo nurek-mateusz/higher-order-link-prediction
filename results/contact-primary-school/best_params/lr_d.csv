@@ -1,0 +1,6 @@
+seed,l1_ratio,C,solver,max_iter,fit_intercept,class_weight,random_state
+3248,1,13.433993325988988,liblinear,5000,True,,3248
+5941,1,13.433993325988988,liblinear,5000,True,,5941
+6553,1,13.433993325988988,liblinear,5000,True,,6553
+8477,0,0.0001,liblinear,5000,True,,8477
+255,0,5.2233450742668435,lbfgs,5000,False,"{0: 1, 1: 5}",255

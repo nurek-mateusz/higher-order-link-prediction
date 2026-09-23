@@ -6,6 +6,7 @@ from scipy.stats import gmean, hmean
 import sys
 import os
 import random
+from utils import load_trg
 
 
 # Function to compute motif numbers (M1-M16) for the given graph and closed set
@@ -54,8 +55,7 @@ def construct_x(x_trg, G, train_closed, filename):
         df2.append(motif_number[edge1] + motif_number[edge2] + motif_number[edge3])
 
     # Create a DataFrame for the feature set with edges as index and motif counts as columns
-    train_df = pd.DataFrame(df2, index=x_trg, columns=[str(i) for i in range(3 * feature_number)])
-    train_df.index.name = 'index'
+    train_df = pd.DataFrame(df2, columns=[str(i) for i in range(3 * feature_number)])
 
     # Compute mean, geometric mean, and harmonic mean for the motif counts
     df_mean = pd.DataFrame()
@@ -65,13 +65,12 @@ def construct_x(x_trg, G, train_closed, filename):
         df_mean[str(i) + '_swg'] = df.apply(gmean, axis=1)  # Geometric mean
         df_mean[str(i) + '_swh'] = df.apply(hmean, axis=1)  # Harmonic mean
 
-    # Save the computed mean values to a pickle file
+    # Save the computed mean values to a parquet file
     save_dir = '../data/motifs/' + dataset
     if not os.path.isdir(save_dir):
         os.makedirs(save_dir)
 
-    with open(save_dir + '/' + filename + '_mean.pickle', 'wb') as f:
-        pickle.dump(df_mean, f)
+    df_mean.to_parquet(save_dir + '/' + filename + '_mean.parquet', compression='zstd', index=False)
 
 # Main function to load data, compute features, and save them for training/testing
 if __name__ == "__main__":
@@ -92,30 +91,18 @@ if __name__ == "__main__":
     data_dir = '../data/processed/' + dataset
     
     # Load data for training and testing
-    with open(data_dir + '/trg_open_train.pickle', 'rb') as f:
-        x_train_trg = pickle.load(f)
-    with open(data_dir + '/trg_closed_train.pickle', 'rb') as f:
-        train_closed = pickle.load(f)
-    with open(data_dir + '/y_train.pickle', 'rb') as f:
-        y_train = pickle.load(f)
+    x_train_trg, y_train = load_trg(data_dir + '/trg_open_train.parquet', with_y=True)
+    train_closed = load_trg(data_dir + '/trg_closed_train.parquet')
     with open(data_dir + '/G_train.pickle', 'rb') as f:
         G_train = pickle.load(f)
 
-    with open(data_dir + '/trg_open_val.pickle', 'rb') as f:
-        x_val_trg = pickle.load(f)
-    with open(data_dir + '/trg_closed_val.pickle', 'rb') as f:
-        val_closed = pickle.load(f)
-    with open(data_dir + '/y_val.pickle', 'rb') as f:
-        y_val = pickle.load(f)
+    x_val_trg, y_val = load_trg(data_dir + '/trg_open_val.parquet', with_y=True)
+    val_closed = load_trg(data_dir + '/trg_closed_val.parquet')
     with open(data_dir + '/G_val.pickle', 'rb') as f:
         G_val = pickle.load(f)
-    
-    with open(data_dir + '/trg_open_test.pickle', 'rb') as f:
-        x_test_trg = pickle.load(f)
-    with open(data_dir + '/trg_closed_test.pickle', 'rb') as f:
-        test_closed = pickle.load(f)
-    with open(data_dir + '/y_test.pickle', 'rb') as f:
-        y_test = pickle.load(f)
+
+    x_test_trg, y_test = load_trg(data_dir + '/trg_open_test.parquet', with_y=True)
+    test_closed = load_trg(data_dir + '/trg_closed_test.parquet')
     with open(data_dir + '/G_test.pickle', 'rb') as f:
         G_test = pickle.load(f)
     

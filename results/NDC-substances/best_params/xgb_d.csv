@@ -1,0 +1,6 @@
+seed,n_estimators,learning_rate,max_depth,min_child_weight,subsample,colsample_bytree,reg_lambda,reg_alpha,scale_pos_weight,eval_metric,n_jobs,random_state
+3248,3,0.05,3,5,1.0,0.75,1,1,1.7407343218316724,logloss,10,3248
+5941,1,0.05,3,5,1.0,0.75,10,1,1,logloss,10,5941
+6553,1,0.1,4,5,1.0,0.75,1,1,1,logloss,10,6553
+8477,1,0.05,3,50,1.0,0.5,10,1,1,logloss,10,8477
+255,1,0.1,8,5,0.7,0.5,1,0,1,logloss,10,255
